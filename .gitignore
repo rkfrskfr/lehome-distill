@@ -1,0 +1,38 @@
+# 화이트리스트 방식: 아래 명시한 핵심 파일만 저장소에 포함
+*
+!.gitignore
+
+# ---- 문서 ----
+!README.md
+!PROJECT_REPORT.md
+
+# ---- 환경·평가 ----
+!lehome_scene.py
+!14_benchmark.py
+!analyze_bench.py
+
+# ---- 모델 서빙 ----
+!12_policy_server.py
+!15_winner_relay.py
+
+# ---- 데이터 수집·변환 ----
+!16_collect_distill.py
+!17_convert_distill.py
+!22_replay_snapshots.py
+
+# ---- 학습·자동화 ----
+!23_train_success_head.py
+!orchestrator.py
+
+# ---- 실행 드라이버 ----
+!run_collect3.ps1
+!run_full_bench.ps1
+!run_infer_sweep.ps1
+
+# ---- 핵심 평가 결과 (본문 수치의 근거) ----
+!bench_final_n5.csv
+!bench_noaug_n100.csv
+!bench_aug_n100.csv
+!bench_noaug_n5.csv
+!bench_aug_n5.csv
+!bench_teach_full.csv
