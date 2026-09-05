@@ -214,9 +214,24 @@ def build_scene(world, say=print, garment_type="Top_Long", settle_steps=240,
     view = cloth._cloth_prim_view
     cooked = view.get_world_positions().cpu().numpy().reshape(-1, 3).astype(np.float32)
     say(f"  쿠킹 입자 {cooked.shape[0]}개 (메시 점 대비 {cooked.shape[0]-raw.shape[0]:+d})")
-    # 쿠킹 좌표는 메시 원점 기준(= raw*scale). 목표 위치만 더하면 배치 완료.
-    rest = cooked
+    # ⚠ 실측(35_frame_probe, 2026-09-05): world.reset() 직후의 쿠킹 좌표는 휴지 자세가
+    # **아니다**. 옷이 원점(테이블 충돌체 내부)에서 쿠킹되며 밀려나 중심 z=+0.23,
+    # 약 7° 기울기, 3cm 비강체 변형이 들어간 상태다. 이걸 초기 자세로 쓰면 옷 중심이
+    # 0.63+0.23=0.86m(상판 위 34cm)에서 떨어져 공식(중심 0.62, 하단이 상판 1cm 위)보다
+    # 훨씬 구겨진 시작 상태가 된다. → 진짜 휴지 자세 = 메시 점 × scale (용접 규칙으로
+    # 입자 순서에 맞춘 것) 을 쓴다. 공식은 프림을 0.63 에 놓고 쿠킹하므로 이와 같다.
+    _wmap, _nkeep = weld_index_map(raw)
+    if _nkeep == cooked.shape[0]:
+        _keep = np.zeros(raw.shape[0], dtype=bool); _keep[np.unique(_wmap, return_index=True)[1]] = True
+        # 유지된 점(첫 등장)들을 메시 순서대로 -> 쿠킹 순서와 동일
+        _kept_idx = np.flatnonzero(_keep)
+        rest = (raw[_kept_idx] * g_scale).astype(np.float32)
+        say(f"[scene] 휴지 자세 = 메시×scale (쿠킹 중심 z={cooked[:, 2].mean():+.3f} 는 테이블 밀림 상태라 폐기)")
+    else:
+        rest = cooked
+        say(f"[scene] 경고: 용접 수 불일치 -> 쿠킹 좌표를 휴지 자세로 사용 (중심 z={cooked[:, 2].mean():+.3f})")
     baked = rest + np.asarray(g_pos, dtype=np.float32)
+    say(f"[scene] 배치 중심 z={baked[:, 2].mean():.3f} (최저 {baked[:, 2].min():.3f}, 상판 0.521)")
     t = torch.tensor(baked[None], device="cuda:0", dtype=torch.float32)
     view.set_world_positions(t)
     view.set_velocities(torch.zeros_like(t))
