@@ -15,7 +15,10 @@ param(
     [string]$GarmentTex = "half",
     [int]$SeedBase = 500,      # change for a fresh batch (seeds = base+10*i+c)
     [string]$Only = "",        # regex: collect only matching garments
-    [string]$DropRange = "0.545,0.63"
+    # drop height of the garment centre. Since the 09-05 rest-pose fix the garment's lowest point is
+    # ~7.4 cm below the centre, so 0.60..0.66 keeps it 0.5..6.5 cm above the table (official 0.63).
+    # (the old "0.545,0.63" range was tuned for the buggy +23 cm offset and would now bury the cloth)
+    [string]$DropRange = "0.60,0.66"
 )
 
 $py = "C:\isaacsim\python.bat"

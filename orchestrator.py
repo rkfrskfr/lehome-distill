@@ -213,7 +213,7 @@ def counts(root):
     return out
 
 
-AUG_ENV = {"LEHOME_RAND_LIGHT": 1, "LEHOME_DROP_Z_RANGE": "0.545,0.63",
+AUG_ENV = {"LEHOME_RAND_LIGHT": 1, "LEHOME_DROP_Z_RANGE": "0.60,0.66",   # 09-05 휴지자세 수정 후 범위
            "LEHOME_RAND_TABLE_TEX": 1,
            # 논문 §3.3: 카메라 포즈/초점 지터(약하게 — 교사가 공식 포즈로 학습됨)
            # + 스텝 단위 조명 흔들기(에피소드 고정 신호 제거)

@@ -366,7 +366,8 @@ def reset_episode(world, scene, rng, settle_steps=180, render=False, say=print,
     # 낙하 높이 조절: 공식 z=0.63 은 상판(0.521) 위 11cm 에서 떨어뜨려 옷이 구겨진다.
     # 낮추면 더 평평하게 안착해 랜드마크 간 거리가 커진다 (일부 옷은 평평한
     # 상태에서도 '벌어짐' 조건이 미달이라 이게 성패를 가든다).
-    # LEHOME_DROP_Z_RANGE="0.545,0.63" 이면 판마다 균등 샘플 (수집 다양화용),
+    # LEHOME_DROP_Z_RANGE="0.60,0.66" 이면 판마다 균등 샘플 (수집 다양화용; 09-05 휴지자세
+    # 수정 후 옷 하단 = 중심 -7.4cm 이므로 0.60 미만은 상판(0.521)에 파묻힌다),
     # 아니면 LEHOME_DROP_Z 고정값.
     _dzr = _os.environ.get("LEHOME_DROP_Z_RANGE")
     _dz = _os.environ.get("LEHOME_DROP_Z")

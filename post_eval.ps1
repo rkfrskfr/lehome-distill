@@ -63,12 +63,10 @@ function Eval-All([string]$ckpt, [string]$tag, [int]$seedBase) {
     Stop-Srv
 }
 
-Mark "post_eval armed - waiting for TEACHER-EVAL-DONE and SEEN8-DONE"
+Mark "post_eval armed - waiting for TEACHER-EVAL-DONE (then GPU-quiet gating per garment)"
 $t = 0
 while ($t -lt (20 * 60)) {
-    $a = MarkerDone "$base\teacher_eval_markers.log" 'TEACHER-EVAL-DONE'
-    $b = MarkerDone "$base\seen8_markers.log" '(SEEN8-DONE|abort)'
-    if ($a -and $b) { break }
+    if (MarkerDone "$base\teacher_eval_markers.log" 'TEACHER-EVAL-DONE') { break }
     Start-Sleep -Seconds 60; $t++
 }
 Mark "1 champion replicate (seeds 201..212)"
