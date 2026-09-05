@@ -51,7 +51,14 @@
 - `16_collect_distill.py` → `17_convert_distill.py` — 수집→변환
 - 드라이버: `run_full_bench.ps1`, `run_collect2.ps1`, `run_eval_students.ps1`, `run_brittle_students.ps1`
 
-## 0. ★ 현재 최고 성적 (2026-08-27)
+## ★★ 2026-09-05 환경 버그 2건 수정 — 이 문서의 이전 수치는 전부 "수정 전" 기준
+
+1. 판정기 기준점 매핑(17:00) 2. 초기 자세 = 테이블에 밀린 쿠킹 좌표 → 옷을 상판 위 34cm 에서
+낙하(20:35). 자세한 내용 `AUDIT.md` §E. 수정 후 원본 모델 첫 60판 81.7%(공식 74.5%) 로 정합 확인.
+새 파이프라인: `teacher_eval.ps1`(원본 재평가) → `fix_chain.ps1`(재수집 `distill_data_fix` →
+`act_student_fix` 학습 → `fix_n5` 평가) / `post_eval.ps1`(구 모델 재평가). 결과 표: `python compile_results.py`.
+
+## 0. 현재 최고 성적 (2026-08-27, 수정 전 환경)
 
 **학생 `act_student_r3plus_aug` (267판, 60k, 증강 ON) + `--n-action-steps 5`
 = 전체 47.5% (Seen 50%, Unseen 35%, Seen_8 제외 51.8%), 120판.**
