@@ -37,7 +37,16 @@ SEED = int(arg("--seed", "0"))
 PHYS_PER_ACTION = int(arg("--phys-per-action", "1"))
 RESET_MODE = arg("--reset-mode", "initial")
 
+# 평가는 항상 명목 조건: 드라이버 셸에 남은 수집용 랜덤화 환경변수가 새어 들어와
+# 평가 조건을 바꾸는 사고를 막는다 (--keep-env 로 명시할 때만 허용).
+if "--keep-env" not in sys.argv:
+    for _k in list(os.environ):
+        if _k.startswith("LEHOME_RAND_") or _k in ("LEHOME_DROP_Z_RANGE",):
+            os.environ.pop(_k, None)
+
 CSV_PATH = os.path.join(HERE, f"bench_{TAG}.csv")
+CSV_FIELDS = ["garment", "ep", "success", "step", "n_pass",
+              "d0", "d1", "d2", "d3", "d4", "sec"]
 TXT_PATH = os.path.join(HERE, f"bench_{TAG}_{GARMENT_DIR}.txt")
 
 _lines = []
@@ -188,7 +197,8 @@ except Exception:
 if rows:
     exists = os.path.exists(CSV_PATH)
     with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        # 고정 필드: 첫 행이 PLACE_FAIL 이어도 열이 깨지지 않게
+        w = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         if not exists:
             w.writeheader()
         w.writerows(rows)

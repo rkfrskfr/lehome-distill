@@ -373,6 +373,7 @@ def reset_episode(world, scene, rng, settle_steps=180, render=False, say=print,
         _dome.GetColorAttr().Set(_Gf.Vec3f(float(_col[0]), float(_col[1]),
                                            float(_col[2])))
         say(f"[reset] 조명 랜덤: 강도 {_inten:.0f}, 색 {np.round(_col, 2).tolist()}")
+        _PERSTEP_BASE["v"] = (float(_inten), tuple(float(x) for x in _col))
 
     # 돔라이트 회전 + 옷 재질 거칠기 (둘 다 물리 무관, 렌더만)
     if _os.environ.get("LEHOME_RAND_LIGHT") == "1":
@@ -569,14 +570,32 @@ def perstep_light(stage, rng, base=None):
     에피소드 단위 랜덤화만으로는 '이 판은 이런 색' 이라는 고정 신호가 남는다."""
     from pxr import UsdLux, Gf
     dome = UsdLux.DomeLight(stage.GetPrimAtPath("/World/Light"))
-    cur = dome.GetIntensityAttr().Get() or 1200.0
-    dome.GetIntensityAttr().Set(float(cur * (1.0 + rng.uniform(-0.08, 0.08))))
-    c = dome.GetColorAttr().Get() or Gf.Vec3f(0.75, 0.75, 0.75)
+    # 에피소드 기준값 주변에서만 흔든다 (감사 지적: 이전 구현은 누적 랜덤워크라
+    # 수백 스텝 뒤 조명이 기준에서 멀리 흘러갔다). 기준값은 reset 때 갱신된다.
+    if base is None:
+        base = _PERSTEP_BASE.get("v")
+    if base is None:
+        base = (float(dome.GetIntensityAttr().Get() or 1200.0),
+                tuple(dome.GetColorAttr().Get() or Gf.Vec3f(0.75, 0.75, 0.75)))
+        _PERSTEP_BASE["v"] = base
+    inten0, col0 = base
+    dome.GetIntensityAttr().Set(float(inten0 * (1.0 + rng.uniform(-0.08, 0.08))))
     j = rng.uniform(-0.03, 0.03, size=3)
     dome.GetColorAttr().Set(Gf.Vec3f(
-        float(min(1.2, max(0.3, c[0] + j[0]))),
-        float(min(1.2, max(0.3, c[1] + j[1]))),
-        float(min(1.2, max(0.3, c[2] + j[2])))))
+        float(min(1.2, max(0.3, col0[0] + j[0]))),
+        float(min(1.2, max(0.3, col0[1] + j[1]))),
+        float(min(1.2, max(0.3, col0[2] + j[2])))))
+
+
+_PERSTEP_BASE = {}
+
+
+def perstep_light_set_base(stage):
+    """리셋 직후 호출: 이 에피소드의 조명 기준값을 기록."""
+    from pxr import UsdLux, Gf
+    dome = UsdLux.DomeLight(stage.GetPrimAtPath("/World/Light"))
+    _PERSTEP_BASE["v"] = (float(dome.GetIntensityAttr().Get() or 1200.0),
+                          tuple(dome.GetColorAttr().Get() or Gf.Vec3f(0.75, 0.75, 0.75)))
 
 def set_gripper_friction(stage, say=print, static=1.2, dynamic=1.0):
     """그리퍼 링크에 물리재질 부여 (기본 PhysX 0.5 → 실물 고무 패드 수준).

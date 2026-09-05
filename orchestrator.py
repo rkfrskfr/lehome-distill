@@ -54,17 +54,17 @@ def arg(n, d):
 CYCLES = int(arg("--cycles", "3"))
 EVAL_EPISODES = int(arg("--eval-episodes", "15"))  # 10판은 오차 ±15%p
 TRAIN_STEPS = int(arg("--train-steps", "60000"))
-TRAIN_BATCH = int(arg("--train-batch", "48"))
+TRAIN_BATCH = int(arg("--train-batch", "16"))  # 48은 480x640에서 VRAM 초과(84s/step) 실측
 # 학생 추론 설정 (논문 §7.1): 청크를 통째로 실행하지 말고 자주 재계획.
 # 실측(2026-08-27 스윕): 청크를 통째로 실행(100)하면 31%, 5개만 실행하고
 # 재계획하면 66%. 두 배 차이 — 기본값 100은 "3.3초 눈 감고 움직이기"였다.
 N_ACTION_STEPS = int(arg("--n-action-steps", "5"))
 # 동시에 돌릴 아이작 심 개수 (논문 §3.1 은 3~5). VRAM 32GB 기준 2가 상한.
-PARALLEL_SIMS = int(arg("--parallel-sims", "2"))
+PARALLEL_SIMS = int(arg("--parallel-sims", "1"))  # 중계기가 동시 1클라이언트만 처리 — 2면 두번째 심이 300s 타임아웃으로 전멸 (감사 확인)
 # 소스별 샘플링 비중 (논문 §2.4). 오래된 주기는 낮게 — 최신 분포를 우선.
 SOURCE_SHARE = {"distill_data_r4": 1.0, "distill_data_r4_replay": 1.0,
-                "distill_data_r3": 0.6, "distill_data_rand": 0.4,
-                "distill_data": 0.3}
+                "distill_data_recov": 1.0, "distill_data_r3": 1.0,
+                "distill_data_rand": 1.0}   # 균질(랜덤화) 소스만, 전량 사용
 
 
 def log(msg):
@@ -168,7 +168,8 @@ def _student_pids():
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine "
-             "-match '12_policy_server' } | ForEach-Object { $_.ProcessId }"],
+             "-match '12_policy_server' -and $_.CommandLine -notmatch "
+             "'Get-CimInstance' } | ForEach-Object { $_.ProcessId }"],
             capture_output=True, text=True, timeout=60).stdout
         return [int(x) for x in re.findall(r"\d+", out)]
     except Exception:
@@ -323,8 +324,8 @@ def convert(tag):
     os.makedirs(merged, exist_ok=True)
     n = 0
     import random as _random
-    for src in (RAW, REPLAY, "distill_data_r3", "distill_data_rand",
-                "distill_data"):
+    for src in (RAW, REPLAY, "distill_data_recov", "distill_data_r3",
+                "distill_data_rand"):   # clean200(distill_data) 은 랜덤화 없음 — 제외
         base = os.path.join(HERE, src)
         if not os.path.isdir(base):
             continue
@@ -352,39 +353,33 @@ def convert(tag):
 
 
 def train(tag, root, resume_from=None):
-    """학습 (이미지 증강 ON — 논문 §2.6, 우리는 그동안 꺼져 있었다)."""
+    """학습 — 검증된 레시피(정책 프리셋: AdamW 1e-5 고정, 백본 1e-5) + 증강 ON.
+    감사 교훈: 프리셋을 끄고 optimizer CLI 를 주면 백본 LR 이 1e-4 로 튀고,
+    논문 LR(1e-4)은 배치 192 기준이라 배치 16 에서는 붕괴(3.3%)한다."""
     out = os.path.join(HERE, "outputs", f"act_student_{tag}")
-    cmd = [TRAIN_EXE,
-           f"--dataset.repo_id=hd/lehome_{tag}",
-           f"--dataset.root={root}",
-           "--policy.type=act",
-           f"--output_dir={out}",
-           f"--steps={TRAIN_STEPS}",
-           # 논문 §2.6 레시피: 코사인 1e-4->1e-5 + 워밍업, 큰 배치, bf16(AMP).
-           # 우리는 그동안 고정 1e-5 / 배치16 / fp32 였다.
-           f"--batch_size={TRAIN_BATCH}", "--num_workers=4", "--seed=1000",
-           "--save_freq=20000", "--wandb.enable=false",
-           "--policy.push_to_hub=false", "--policy.use_amp=true",
-           # ⚠ use_policy_training_preset 이 true(기본)면 optimizer/scheduler CLI
-           # 인자가 정책 프리셋으로 조용히 덮어써진다 — 반드시 false 로 꺼야 한다.
-           "--use_policy_training_preset=false",
-           "--optimizer.type=adamw", "--optimizer.lr=1e-4",
-           "--optimizer.weight_decay=1e-4", "--optimizer.grad_clip_norm=10.0",
-           "--policy.optimizer_lr=1e-4",
-           "--policy.optimizer_lr_backbone=1e-5",
-           "--scheduler.type=cosine_decay_with_warmup",
-           "--scheduler.num_warmup_steps=2000",
-           f"--scheduler.num_decay_steps={TRAIN_STEPS}",
-           "--scheduler.peak_lr=1e-4", "--scheduler.decay_lr=1e-5",
-           "--dataset.image_transforms.enable=true",
-           "--dataset.image_transforms.max_num_transforms=3",
-           # 과적합 시점을 보기 위한 홀드아웃 (지금까지 eval_split=0 이었다)
-           "--dataset.eval_split=0.05", "--eval_steps=200",
-           "--max_eval_samples=2000"]
-    if resume_from:
-        cmd += [f"--policy.pretrained_path={resume_from}"]
+    last = os.path.join(out, "checkpoints", "last", "pretrained_model",
+                        "train_config.json")
+    if os.path.exists(last):
+        # 중단된 학습이 있으면 그 지점부터 재개 (lerobot 은 output_dir 존재 시 새 학습을 거부)
+        log(f"  기존 체크포인트 발견 — 재개: {tag}")
+        cmd = [TRAIN_EXE, f"--config_path={last}", "--resume=true"]
+    else:
+        shutil.rmtree(out, ignore_errors=True)
+        cmd = [TRAIN_EXE,
+               f"--dataset.repo_id=hd/lehome_{tag}",
+               f"--dataset.root={root}",
+               "--policy.type=act",
+               f"--output_dir={out}",
+               f"--steps={TRAIN_STEPS}",
+               f"--batch_size={TRAIN_BATCH}", "--num_workers=4", "--seed=1000",
+               "--save_freq=20000", "--wandb.enable=false",
+               "--policy.push_to_hub=false",
+               "--dataset.image_transforms.enable=true",
+               "--dataset.image_transforms.max_num_transforms=3"]
+        if resume_from:
+            cmd += [f"--policy.pretrained_path={resume_from}"]
     log(f"  학습 시작: {tag} ({TRAIN_STEPS} steps, 증강 ON)")
-    rc, _ = run(cmd, timeout=8 * 3600,
+    rc, _ = run(cmd, timeout=14 * 3600,
                 log_path=os.path.join(HERE, f"train_{tag}.log"))
     ck = os.path.join(out, "checkpoints", f"{TRAIN_STEPS:06d}",
                       "pretrained_model")
@@ -446,7 +441,7 @@ def train_success_head(tag):
     log("  성공확률 예측기 학습")
     run([VENV_PY, os.path.join(HERE, "23_train_success_head.py"),
          "--ok", f"{RAW},{REPLAY}", "--fail", RAW_FAIL,
-         "--epochs", "6", "--out", out],
+         "--epochs", "6", "--out", out, "--split-by", "chunk"],
         timeout=3 * 3600,
         log_path=os.path.join(HERE, "succhead_auto.log"))
     rep = os.path.join(HERE, out, "report.json")
@@ -579,7 +574,8 @@ def main():
 
         if st["stage"] == "amplify":
             rates = (st["history"][-1]["per_garment"] if st["history"] else {})
-            weak = [g for g in garments() if rates.get(g, 0.0) < 0.3][:4]
+            weak = sorted([g for g in garments() if rates.get(g, 0.0) < 0.3],
+                          key=lambda g: rates.get(g, 0.0))[:4]
             if weak:
                 log(f"증식 대상(성공률<30%): {[w.replace('Top_Long_','') for w in weak]}")
                 amplify(weak, seed_base)

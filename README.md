@@ -74,7 +74,7 @@ Isaac Sim (Windows, 시뮬레이션)
 |---|---|
 | `bench_final_n5.csv` | 최고 기록 47.5% (12벌 × 10회) |
 | `bench_noaug_n100 / aug_n100 / noaug_n5 / aug_n5.csv` | 행동 묶음 길이 × 증강 2×2 비교 (31→66% 근거) |
-| `bench_teach_full.csv` | 우승자 모델 동일 환경 측정 |
+| `bench_teach_full.csv` | 우승자 모델 동일 환경 측정 (옷 4벌 × 8회 부분 평가; 전체 120회 수치는 45.8%) |
 
 ## 실행 개요
 

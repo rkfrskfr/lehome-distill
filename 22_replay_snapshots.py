@@ -111,24 +111,44 @@ def _peak_pred(ep_dir):
         return -1.0
 
 
-snap_files = []
+# 에피소드별 후보 스냅샷 수집. recover 모드는 에피소드당 1개(마지막 직전 = 아직
+# 회복 여지가 있는 중간 상태; 맨 마지막은 타임아웃 종료 상태라 제외)를 골라
+# **여러 에피소드에 고르게** 분산시킨다 (감사: 정렬 앞 2판에서만 뽑히던 문제).
+import numpy as _np0
+cands = []   # (ep_dir, snap_path, robot_z)
 for ep in sorted(glob.glob(os.path.join(SRC, f"{GARMENT_DIR}_*"))):
     if not os.path.isdir(ep):
         continue
     snaps = sorted(glob.glob(os.path.join(ep, "snap_*.npz")))
     if MODE == "semi":
-        # 교사가 한때 성공을 유망하게 봤던 판만 (peak >= 0.35)
         if _peak_pred(ep) < 0.35 and _npass_of(ep) < 3:
             continue
-    for s in snaps:
-        step = int(os.path.basename(s)[5:9])
-        if MODE == "success" and step <= 5:
-            snap_files.append(s)
-        elif MODE in ("recover", "semi") and step > 5:
-            snap_files.append(s)
-snap_files = snap_files[:MAX_SNAPS]
+    if MODE == "success":
+        pick = [s for s in snaps if int(os.path.basename(s)[5:9]) <= 5]
+    else:
+        mid = [s for s in snaps if int(os.path.basename(s)[5:9]) > 5]
+        pick = [mid[-2]] if len(mid) >= 2 else mid[-1:]
+    for s in pick:
+        try:
+            rz = float(_np0.load(s)["robot_z"])
+        except Exception:
+            rz = 0.5
+        cands.append((ep, s, round(rz, 4)))
+
+# 로봇 높이: 스냅샷마다 수집 청크의 z 가 다르다(±10mm). 무대는 프로세스당 1개
+# 높이로만 지을 수 있으므로 **다수 높이를 골라 그 스냅샷만** 복원한다 (감사 지적:
+# 이걸 무시하면 팔 높이가 1cm 어긋난 상태에서 회복을 시도하게 된다).
+if cands:
+    from collections import Counter as _Ctr
+    z_major = _Ctr(rz for _, _, rz in cands).most_common(1)[0][0]
+    os.environ["LEHOME_ROBOT_Z"] = f"{z_major:.4f}"
+    cands = [c for c in cands if c[2] == z_major]
+    say_z = f"로봇 z={z_major:.4f} (스냅샷 {len(cands)}개 일치)"
+else:
+    say_z = "스냅샷 없음"
+snap_files = [s for _, s, _ in cands][:MAX_SNAPS]
 say(f"=== 22단 리플레이({MODE}): {GARMENT_DIR} 스냅샷 {len(snap_files)}개 "
-    f"× {PER_SNAP}회 -> {OUT} ===")
+    f"× {PER_SNAP}회 -> {OUT} === [{say_z}]")
 if not snap_files:
     say("스냅샷 없음 — 종료")
     raise SystemExit(0)
@@ -200,7 +220,9 @@ try:
         col = 0.6 + 0.4 * rng.uniform(size=3)
         dome.GetColorAttr().Set(_Gf.Vec3f(*[float(c) for c in col]))
         randomize_table_texture(stage, rng, say)
-        if rng.rand() < 0.8:   # 논문: 텍스처 스왑 p=0.8
+        # 옷 텍스처 스왑은 수집기와 같은 환경변수로 켠다 (교사 성공률 보호).
+        # 성공 리플레이(성공만 보관)에서는 논문대로 p=0.8 까지 세게 걸어도 된다.
+        if os.environ.get("LEHOME_RAND_GARMENT_TEX") == "1" and rng.rand() < 0.8:
             randomize_garment_texture(stage, rng, say)
 
         # 카메라 annotator 갱신 (리셋 뒤 렌더 필수 — 검증된 함정)
@@ -212,7 +234,7 @@ try:
         for rep in range(PER_SNAP):
             rng = np.random.RandomState(SEED * 10000 + si * 100 + rep)
             tag = f"{os.path.basename(os.path.dirname(snap))}_" \
-                  f"{os.path.basename(snap)[:-4]}_r{rep}"
+                  f"{os.path.basename(snap)[:-4]}_s{SEED}_r{rep}"
             say(f"--- [{si+1}/{len(snap_files)}] {tag} ---")
             restore(snap, rng)
             send_msg(conn, {"reset": True})

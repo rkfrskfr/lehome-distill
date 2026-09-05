@@ -108,6 +108,11 @@ def main():
 
     img_keys = sorted(policy.config.image_features.keys())
     state_dim = policy.config.input_features["observation.state"].shape[0]
+    # 모델이 학습한 이미지 해상도 (C,H,W). 시뮬은 항상 480x640 을 보내므로
+    # 저해상도로 학습한 모델이면 여기서 맞춰 줘야 한다.
+    _shape = tuple(policy.config.image_features[img_keys[0]].shape)
+    EXPECT_HW = (int(_shape[-2]), int(_shape[-1]))
+    print(f"[server] expected image HxW={EXPECT_HW}", flush=True)
     print(f"[server] image_keys={img_keys} state_dim={state_dim} "
           f"chunk={policy.config.chunk_size} "
           f"n_action_steps={policy.config.n_action_steps}", flush=True)
@@ -142,6 +147,7 @@ def main():
                     return
                 if msg.get("reset"):
                     policy.reset()
+                    _queue.clear()      # 합의 모드의 남은 행동 큐도 비운다
                     send_msg(conn, {"ok": True, "image_keys": img_keys})
                     continue
                 obs = {
@@ -151,8 +157,12 @@ def main():
                 }
                 for k in img_keys:
                     img = np.asarray(msg["images"][k], dtype=np.uint8)
-                    obs[k] = (torch.from_numpy(img).permute(2, 0, 1)
-                              .float().unsqueeze(0) / 255.0)
+                    if img.shape[:2] != EXPECT_HW:
+                        from PIL import Image as _Im
+                        img = np.asarray(_Im.fromarray(img).resize(
+                            (EXPECT_HW[1], EXPECT_HW[0]), _Im.BILINEAR))
+                    obs[k] = (torch.from_numpy(np.ascontiguousarray(img))
+                              .permute(2, 0, 1).float().unsqueeze(0) / 255.0)
                 with torch.inference_mode():
                     obs = pre(obs)
                     if CONSENSUS > 1:
