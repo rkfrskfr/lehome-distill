@@ -95,8 +95,10 @@ while ($t -lt (20 * 60)) {
 }
 Mark "1 champion replicate (seeds 201..212)"
 Eval-All "$base\outputs\act_student_r3plus_aug\checkpoints\060000\pretrained_model" "final_n5_rep" 200
-Mark "2 curated-data model (seeds 101..112)"
+Mark "2 seed-variance model (seeds 301..312)"
+Eval-All "$base\outputs\act_student_seed2\checkpoints\060000\pretrained_model" "seed2_n5" 300
+Mark "3 curated-data model (seeds 101..112)"
 Eval-All "$base\outputs\act_student_cur\checkpoints\060000\pretrained_model" "cur_n5" 100
-Mark "3 noaug ablation (seeds 1..12)"
+Mark "4 noaug ablation (seeds 1..12)"
 Eval-All "$base\outputs\act_student_r3plus\checkpoints\060000\pretrained_model" "noaug_full_n5" 0
 Mark "POST-EVAL-DONE"
