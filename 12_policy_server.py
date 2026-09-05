@@ -23,7 +23,7 @@ import sys
 import numpy as np
 import torch
 
-HOST, PORT = "127.0.0.1", 8766
+HOST, PORT = "127.0.0.1", int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8766
 
 
 def recv_msg(conn):

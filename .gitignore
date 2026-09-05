@@ -39,3 +39,6 @@
 !31_real_robot_bridge.py
 !weekend2.ps1
 !chunk30.ps1
+!ablation.ps1
+!32_judge_probe.py
+!audit_result.json

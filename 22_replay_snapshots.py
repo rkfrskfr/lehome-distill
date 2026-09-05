@@ -146,7 +146,8 @@ if cands:
     say_z = f"로봇 z={z_major:.4f} (스냅샷 {len(cands)}개 일치)"
 else:
     say_z = "스냅샷 없음"
-snap_files = [s for _, s, _ in cands][:MAX_SNAPS]
+cands_all = [s for _, s, _ in cands]
+snap_files = cands_all[:MAX_SNAPS]
 say(f"=== 22단 리플레이({MODE}): {GARMENT_DIR} 스냅샷 {len(snap_files)}개 "
     f"× {PER_SNAP}회 -> {OUT} === [{say_z}]")
 if not snap_files:
@@ -228,6 +229,31 @@ try:
         # 카메라 annotator 갱신 (리셋 뒤 렌더 필수 — 검증된 함정)
         for _ in range(12):
             world.step(render=True)
+
+    # --- 오프라인 점수 선별 (감사 제안): 후보 스냅샷의 천 좌표로 판정 조건을 계산해
+    # "거의 성공(통과 조건 많고 여유가 작은)" 상태부터 재시도한다. 시각 정보 없이
+    # 물리 상태만으로 계산 가능. 성공 모드(step5)는 점수 무의미하므로 recover/semi 만.
+    if MODE in ("recover", "semi") and snap_files:
+        idx_ck = list(scene["check_idx"])
+        thr_ck = [t * float(scene["gcfg"]["scale"][0])
+                  for t in scene["gcfg"]["success_distance"]]
+        pairs = [(0, 4), (2, 3), (1, 5), (0, 1), (4, 5)]
+        scored = []
+        for s_path in cands_all if 'cands_all' in dir() else snap_files:
+            try:
+                cp = np.load(s_path)["cloth_pos"].reshape(-1, 3)[idx_ck] * 100.0
+            except Exception:
+                continue
+            dd = [float(np.linalg.norm(cp[a] - cp[b])) for a, b in pairs]
+            passed = [dd[0] <= thr_ck[0], dd[1] <= thr_ck[1], dd[2] <= thr_ck[2],
+                      dd[3] >= thr_ck[3], dd[4] >= thr_ck[4]]
+            # 근접 조건 여유(작을수록 좋음) — 미통과 조건만 합산
+            deficit = sum(max(0.0, dd[k] - thr_ck[k]) for k in range(3)) +                       sum(max(0.0, thr_ck[k] - dd[k]) for k in (3, 4))
+            scored.append((sum(passed), -deficit, s_path))
+        scored.sort(reverse=True)
+        snap_files = [s_path for _, _, s_path in scored][:MAX_SNAPS]
+        say("[select] 상위 스냅샷 (통과수, -여유cm): " +
+            ", ".join(f"{a}/{-b:.1f}" for a, b, _ in scored[:MAX_SNAPS]))
 
     n_kept = 0
     for si, snap in enumerate(snap_files):
