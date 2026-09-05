@@ -36,3 +36,6 @@
 !bench_noaug_n5.csv
 !bench_aug_n5.csv
 !bench_teach_full.csv
+!31_real_robot_bridge.py
+!weekend2.ps1
+!chunk30.ps1
