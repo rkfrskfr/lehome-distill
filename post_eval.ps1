@@ -26,11 +26,15 @@ function IsaacCount {
 }
 function WaitQuiet([string]$why) {
     # VRAM budget (32 GB, JAX teacher ~9 GB resident): training + 1 Isaac, or 2 Isaac without training.
-    $t = 0
+    $t = 0; $okStreak = 0
     while ($t -lt 900) {
         $n = IsaacCount
-        if ($n -eq 0) { break }
-        if ($n -le 1 -and -not (TrainingRunning)) { break }
+        $quiet = ($n -eq 0) -or ($n -le 1 -and -not (TrainingRunning))
+        if ($quiet) {
+            # debounce: the condition must hold twice, 45 s apart (a process may be spawning)
+            $okStreak++; if ($okStreak -ge 2) { break }; Start-Sleep -Seconds 45; continue
+        }
+        $okStreak = 0
         if ($t % 30 -eq 0) { Mark "waiting for GPU ($why; isaac=$n training=$(TrainingRunning))" }
         Start-Sleep -Seconds 60; $t++
     }
@@ -78,10 +82,15 @@ function Eval-All([string]$ckpt, [string]$tag, [int]$seedBase) {
     Stop-Srv
 }
 
-Mark "post_eval armed - waiting for TEACHER-EVAL-DONE (then GPU-quiet gating per garment)"
+# Start only after the corrected-environment collection is finished (COLLECT-FIX-DONE, or fix_chain gone):
+# a kit.exe-count gate alone raced with the collection process spawning (09-06 01:07) and oversubscribed the GPU.
+Mark "post_eval armed - waiting for TEACHER-EVAL-DONE and COLLECT-FIX-DONE"
 $t = 0
 while ($t -lt (20 * 60)) {
-    if (MarkerDone "$base\teacher_eval_markers.log" 'TEACHER-EVAL-DONE') { break }
+    $a = MarkerDone "$base\teacher_eval_markers.log" 'TEACHER-EVAL-DONE'
+    $b = MarkerDone "$base\fix_chain_markers.log" 'COLLECT-FIX-DONE'
+    $fixAlive = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'fix_chain\.ps1' -and $_.CommandLine -notmatch 'Win32_Process' }
+    if ($a -and ($b -or -not $fixAlive)) { break }
     Start-Sleep -Seconds 60; $t++
 }
 Mark "1 champion replicate (seeds 201..212)"

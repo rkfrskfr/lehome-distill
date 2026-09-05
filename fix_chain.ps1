@@ -28,11 +28,14 @@ function IsaacCount {
 }
 function WaitQuiet([string]$why) {
     # VRAM budget (32 GB, JAX teacher ~9 GB resident): training + 1 Isaac, or 2 Isaac without training.
-    $t = 0
+    $t = 0; $okStreak = 0
     while ($t -lt 900) {
         $n = IsaacCount
-        if ($n -eq 0) { break }
-        if ($n -le 1 -and -not (TrainingRunning)) { break }
+        $quiet = ($n -eq 0) -or ($n -le 1 -and -not (TrainingRunning))
+        if ($quiet) {
+            $okStreak++; if ($okStreak -ge 2) { break }; Start-Sleep -Seconds 45; continue
+        }
+        $okStreak = 0
         if ($t % 30 -eq 0) { Mark "waiting for GPU ($why; isaac=$n training=$(TrainingRunning))" }
         Start-Sleep -Seconds 60; $t++
     }
