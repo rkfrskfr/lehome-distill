@@ -2,7 +2,7 @@
 # fixes, every earlier demonstration was collected from a 34 cm drop; re-collect on the fixed
 # environment and train a fresh student.
 #   1) wait TEACHER-EVAL-DONE (relay 8767 is single-client)
-#   2) collect all 10 Seen garments incl. Seen_8 -> distill_data_fix  (24 keeps x garment, 2 chunks)
+#   2) collect all 10 Seen garments incl. Seen_8 -> distill_data_fix  (20 keeps x garment, 2 chunks)
 #   3) convert -> distill_lerobot_fix, train act_student_fix (proven recipe: 60k, batch16, aug)
 #   4) eval fix_n5 on port 8766 when no other Isaac process runs
 # ASCII only.
@@ -91,8 +91,8 @@ while ($t -lt 600) {
 if (-not (PortUp 8767)) { Mark "relay 8767 down - abort"; exit 1 }
 
 # ---- 2) collection on the corrected environment (all Seen incl. Seen_8)
-Mark "2 collect distill_data_fix (10 garments x 24 keeps, 2 chunks, seeds 4000+)"
-& powershell -ExecutionPolicy Bypass -File "$base\run_collect3.ps1" -Keeps 24 -Chunks 2 -Out distill_data_fix -SeedBase 4000 -GarmentTex half
+Mark "2 collect distill_data_fix (10 garments x 20 keeps, 2 chunks, seeds 4000+)"
+& powershell -ExecutionPolicy Bypass -File "$base\run_collect3.ps1" -Keeps 20 -Chunks 2 -Out distill_data_fix -SeedBase 4000 -GarmentTex half
 $n = @(Get-ChildItem "$base\distill_data_fix" -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'meta.json') }).Count
 Mark "COLLECT-FIX-DONE keeps=$n"
 # compatibility marker for chains that wait on the Seen_8 collection
