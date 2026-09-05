@@ -42,3 +42,7 @@
 !ablation.ps1
 !32_judge_probe.py
 !audit_result.json
+!AUDIT.md
+!HANDOFF.md
+!33_dup_check.py
+!teacher_eval.ps1

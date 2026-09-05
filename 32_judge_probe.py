@@ -50,7 +50,22 @@ try:
         dm = [float(np.linalg.norm(pm[a] - pm[b])) for a, b in pairs]
         # 최근접 매핑 잔차: 메시 점 -> 매핑된 쿠킹 점 거리
         resid = [float(np.linalg.norm(rest[idx[k]] - raw[raw_idx[k]]) * 100) for k in range(6)]
-        info = {"check_point(mesh)": raw_idx, "mapped(cooked)": idx,
+        # 좌표계 관계 추정: 점 수가 같으면 순서 대응을 가정하고 Kabsch 로 R,t 를 맞춘다.
+        frame = {}
+        if raw.shape[0] == rest.shape[0]:
+            A = raw.astype(np.float64); B = rest.astype(np.float64)
+            ca, cb = A.mean(0), B.mean(0)
+            H = (A - ca).T @ (B - cb)
+            U, S, Vt = np.linalg.svd(H)
+            D = np.diag([1, 1, np.sign(np.linalg.det(Vt.T @ U.T))])
+            R = Vt.T @ D @ U.T
+            t = cb - R @ ca
+            fit = ((A @ R.T + t) - B)
+            frame = {"R": np.round(R, 3).tolist(), "t_cm": np.round(t * 100, 2).tolist(),
+                     "fit_resid_cm_median": round(float(np.median(np.linalg.norm(fit, axis=1)) * 100), 3),
+                     "raw_centroid_cm": np.round(ca * 100, 1).tolist(),
+                     "cooked_centroid_cm": np.round(cb * 100, 1).tolist()}
+        info = {"frame_fit": frame, "check_point(mesh)": raw_idx, "mapped(cooked)": idx,
                 "distinct_mapped": len(set(idx)) == 6,
                 "thr_cm": [round(t, 1) for t in thr],
                 "rest_d_cooked_cm [d0,d1,d2,d3,d4]": [round(x, 1) for x in d],

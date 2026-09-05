@@ -464,26 +464,86 @@ def add_cameras(stage, say=print):
     return cams
 
 
+def weld_index_map(raw):
+    """PhysX 쿠커의 용접 규칙(같은 좌표 점은 첫 등장만 유지, 순서 보존)으로
+    메시 인덱스 -> 쿠킹 입자 인덱스 배열을 만든다. 실측(33_dup_check, 2026-09-05):
+    12벌 전부 '메시 중복 점 수 == 용접으로 사라진 점 수' (202/117/32/0 ...)."""
+    import numpy as np
+    q = np.round(np.asarray(raw, dtype=np.float64) * 1e5).astype(np.int64)
+    _, first, inv = np.unique(q, axis=0, return_index=True, return_inverse=True)
+    inv = np.asarray(inv).reshape(-1)
+    keep = np.zeros(q.shape[0], dtype=bool); keep[first] = True
+    cooked_pos = np.cumsum(keep) - 1            # 유지된 점의 쿠킹 인덱스
+    rep = first[inv]                            # 각 점의 대표(첫 등장) 메시 인덱스
+    return cooked_pos[rep], int(keep.sum())
+
+
 def map_check_points(gcfg, raw, rest, say=print):
     """check_point 인덱스(메시 순서)를 쿠킹된 입자 인덱스로 변환.
 
-    쿠커가 중복점을 용접하면 입자 인덱스가 밀린다. 공식 JSON 의 인덱스는
-    **메시 순서**를 가리킨다 (실측: Seen_4 를 쿠킹순서로 읽으면 p0/p1 이 같은
-    어깨에 겹쳐 d(0,1)=0.5cm 로 통과 불가, 메시순서면 좌/우 어깨 16.7cm 로 정상).
+    실측(2026-09-05, 32_judge_probe / 33_dup_check):
+      - 쿠킹 입자 좌표는 메시 좌표에 **+23cm z 이동(+수 도 기울기, 비강체 3cm)** 이
+        걸려 있다. 정렬 없이 최근접 매핑을 하면 20cm 떨어진 엉뚱한 입자를 잡는다
+        (Seen_8 어깨 거리 4.6cm 로 구조적 통과 불가, 다른 옷도 랜드마크 오염).
+      - 쿠커는 같은 좌표의 중복 점을 '첫 등장만 유지' 로 용접하며 순서를 보존한다.
+    규칙: 용접 규칙으로 **정확한 인덱스 대응**을 만든다(점 수 같으면 항등과 동일).
+    대응이 검증(Kabsch 잔차)에 실패하면 ICP 정렬 후 최근접으로 대체한다.
     """
     import numpy as np
     scale = float(gcfg["scale"][0])
-    scaled = raw * scale
-    mapped = []
-    for mi in gcfg["check_point"]:
-        mi = int(mi)
+    scaled = (raw * scale).astype(np.float64)
+    rest64 = np.asarray(rest, dtype=np.float64)
+    cps = [int(mi) for mi in gcfg["check_point"]]
+    for mi in cps:
         if mi >= scaled.shape[0]:
             raise RuntimeError(f"check_point {mi} 가 메시 점 수 초과")
-        j = int(np.argmin(np.linalg.norm(rest - scaled[mi], axis=1)))
-        mapped.append(j)
-    if raw.shape[0] != rest.shape[0]:
-        say(f"[scene] check_point 재매핑(용접 {raw.shape[0]-rest.shape[0]}): "
-            f"{list(gcfg['check_point'])} -> {mapped}")
+
+    def kabsch_resid(A, B):
+        ca, cb = A.mean(0), B.mean(0)
+        U, S, Vt = np.linalg.svd((A - ca).T @ (B - cb))
+        D = np.diag([1, 1, np.sign(np.linalg.det(Vt.T @ U.T))])
+        R = Vt.T @ D @ U.T; t = cb - R @ ca
+        return float(np.median(np.linalg.norm(A @ R.T + t - B, axis=1)) * 100)
+
+    m, n_keep = weld_index_map(raw)
+    if n_keep == rest64.shape[0]:
+        rng = np.random.RandomState(0)
+        sel = rng.choice(scaled.shape[0], min(2000, scaled.shape[0]), replace=False)
+        res = kabsch_resid(scaled[sel], rest64[m[sel]])
+        if res < 8.0:
+            mapped = [int(m[mi]) for mi in cps]
+            tag = "항등" if scaled.shape[0] == rest64.shape[0] else f"용접 {scaled.shape[0]-n_keep} 보정"
+            say(f"[scene] check_point 정확 매핑({tag}, 정합 잔차 {res:.1f}cm): {cps} -> {mapped}")
+            return mapped
+        say(f"[scene] check_point 용접 대응 검증 실패(잔차 {res:.1f}cm) -> ICP 로 대체")
+    else:
+        say(f"[scene] check_point 용접 수 불일치(중복 {scaled.shape[0]-n_keep} vs 사라진 "
+            f"{scaled.shape[0]-rest64.shape[0]}) -> ICP 로 대체")
+
+    # --- 대체 경로: 정렬 후 최근접 ---
+    def nearest(src, dst):
+        out = np.empty(src.shape[0], dtype=np.int64)
+        for a in range(0, src.shape[0], 512):
+            blk = src[a:a + 512]
+            d2 = ((blk[:, None, :] - dst[None, :, :]) ** 2).sum(-1)
+            out[a:a + 512] = d2.argmin(1)
+        return out
+
+    rng = np.random.RandomState(0)
+    sub = scaled[rng.choice(scaled.shape[0], min(1500, scaled.shape[0]), replace=False)]
+    R = np.eye(3); t = rest64.mean(0) - scaled.mean(0)
+    for _ in range(6):
+        nn = nearest(sub @ R.T + t, rest64)
+        A, B = sub, rest64[nn]
+        ca, cb = A.mean(0), B.mean(0)
+        U, S, Vt = np.linalg.svd((A - ca).T @ (B - cb))
+        D = np.diag([1, 1, np.sign(np.linalg.det(Vt.T @ U.T))])
+        R = Vt.T @ D @ U.T; t = cb - R @ ca
+    aligned_cp = scaled[cps] @ R.T + t
+    mapped = nearest(aligned_cp, rest64).tolist()
+    resid = [float(np.linalg.norm(rest64[mapped[k]] - aligned_cp[k]) * 100) for k in range(len(cps))]
+    say(f"[scene] check_point ICP 매핑(t_z={t[2]*100:.1f}cm): {cps} -> {mapped} "
+        f"잔차 {[round(r, 2) for r in resid]}cm")
     return mapped
 
 
@@ -648,8 +708,12 @@ def jitter_garment_material(stage, rng, say=print):
     for prim in Usd.PrimRange(root):
         if prim.IsA(UsdShade.Shader):
             sh = UsdShade.Shader(prim)
+            # OmniPBR(MDL) 와 UsdPreviewSurface 두 계열의 입력 이름을 모두 시도
+            # (감사: 옷 재질은 UsdPreviewSurface 라 MDL 이름만 쓰면 no-op 이었다)
             for name, lo, hi in (("reflection_roughness_constant", 0.3, 0.9),
-                                 ("metallic_constant", 0.0, 0.15)):
+                                 ("metallic_constant", 0.0, 0.15),
+                                 ("roughness", 0.3, 0.9),
+                                 ("metallic", 0.0, 0.15)):
                 inp = sh.GetInput(name)
                 if inp:
                     inp.Set(float(rng.uniform(lo, hi)))
