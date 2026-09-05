@@ -1,7 +1,8 @@
 # Cycle-3 collection: per-garment balanced keeps + widened randomization.
 # Height +-10mm (per chunk), drop-z range, lighting, table texture always on.
 # Garment texture: -GarmentTex off | on | half (half = only even chunks).
-# Excludes Seen_8 (teacher 0%). ASCII only. Usage:
+# Seen_8 included since 2026-09-05 (its 0% was a judge mapping bug, fixed in lehome_scene v3).
+# ASCII only. Usage:
 #   powershell -ExecutionPolicy Bypass -File run_collect3.ps1
 #   powershell -ExecutionPolicy Bypass -File run_collect3.ps1 -Keeps 20 -GarmentTex half
 param(
@@ -22,7 +23,7 @@ $script = "C:\Users\H\Desktop\lehome-win\16_collect_distill.py"
 $root = "C:\Users\H\Desktop\lehome-win\Assets\objects\Challenge_Garment\Release\$Type"
 
 $garments = Get-ChildItem $root -Directory |
-    Where-Object { $_.Name -match "_Seen_\d+$" -and $_.Name -notmatch "_Seen_8$" } |
+    Where-Object { $_.Name -match "_Seen_\d+$" } |
     Sort-Object Name
 if ($Only -ne "") {
     $garments = $garments | Where-Object { $_.Name -match $Only }
