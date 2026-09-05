@@ -136,4 +136,13 @@
 3. **rand137 실패판 천 폭발**(좌표 1e10cm): 원인 미조사. 랜덤화 높이+학생 행동 조합 의심.
 4. ~~Seen_8은 교사도 0% (성공조건 상충 의심)~~ → 2026-09-05 해결: 판정기 기준점 매핑 버그
    (쿠킹 좌표 z +23cm 미보정). `lehome_scene.map_check_points` v3 로 수정. Seen_8 은 학습
-   데이터가 아직 0판이므로 수집 대상에 다시 넣을 것.
+   데이터가 아직 0판이므로 수집 대상에 다시 넣을 것 (`seen8_chain.ps1` 이 교사 재평가 후 자동 수집).
+
+## 8. 실물 SO-101 연동 순서 (월요일)
+
+1. 모델 서버: `python 12_policy_server.py <ckpt> --n-action-steps 5` (GPU 없으면 `--device cpu` 도 됨, 15ms/스텝)
+2. 프로토콜 확인(로봇 불필요): `python 31_real_robot_bridge.py --selftest` — 2026-09-05 통과
+3. `--check --left COMx --right COMy` → 모터 통신·현재 각도
+4. `--home` → 시뮬 홈 자세로 천천히 이동. 모양이 다르면 `SIGN/OFFSET_DEG` 표 수정
+5. `--run --cams 0,1,2` (dry-run, 명령만 출력) → 이상 없으면 `--live`
+   그리퍼 범위 상수는 수집 데이터 실측(닫힘 -0.2 / 열림 0.7 rad)으로 맞춰 둠.

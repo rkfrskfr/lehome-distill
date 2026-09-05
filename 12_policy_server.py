@@ -121,10 +121,12 @@ def main():
         print("[server] CHECK_OK", flush=True)
         return
 
-    policy.to("cuda").eval()
+    # --device cpu : GPU 가 꽉 찼을 때 프로토콜 검사용 (브리지 --selftest 등)
+    dev = sys.argv[sys.argv.index("--device") + 1] if "--device" in sys.argv else "cuda"
+    policy.to(dev).eval()
     pre, post = make_pre_post_processors(
         policy.config, pretrained_path=ckpt,
-        preprocessor_overrides={"device_processor": {"device": "cuda"}})
+        preprocessor_overrides={"device_processor": {"device": dev}})
     print(f"[server] 체크포인트 로드 완료: {ckpt}", flush=True)
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

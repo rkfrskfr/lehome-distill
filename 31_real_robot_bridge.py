@@ -2,6 +2,7 @@
 관절 명령을 실물 팔로 보낸다. 월요일 실물 연동 테스트용 (lerobot venv 에서 실행).
 
 모드:
+  --selftest : 로봇·카메라 없이 모델 서버와의 프로토콜만 검증 (가짜 관측 3회) — 2026-09-05 통과
   --check : 두 팔 연결 + 현재 관절각 출력 (모터 통신 확인)
   --home  : 시뮬 홈 자세로 5초에 걸쳐 천천히 이동 (부호/오프셋 정합 확인용)
   --run   : 웹캠 3대 관측 -> 모델 서버 -> 관절 명령 폐루프 (기본은 dry-run: 출력만)
@@ -37,8 +38,9 @@ HOME_L = [-1.2363, -1.7135, 1.4979, 1.0534, -0.085, -0.01176]
 #   real_deg = SIGN * rad2deg(sim_rad) + OFFSET_DEG
 SIGN = {m: 1.0 for m in MOTORS}
 OFFSET_DEG = {m: 0.0 for m in MOTORS}
-# 그리퍼: 시뮬 관절각(rad) -> 실물 0~100 (열림/닫힘 범위는 실측 후 조정)
-GRIP_RAD_OPEN, GRIP_RAD_CLOSED = 1.0, -0.05
+# 그리퍼: 시뮬 관절각(rad) -> 실물 0~100. 수집 데이터(r4, 60판) 실측: 닫힘 -0.2~-0.1,
+# 열림 최대 0.69 → 아래 범위. 실물 그리퍼 0/100 이 어느 쪽인지 --home 에서 확인 후 조정.
+GRIP_RAD_OPEN, GRIP_RAD_CLOSED = 0.7, -0.2
 
 
 def arg(n, d):
@@ -131,6 +133,28 @@ def move_slowly(robot, target, seconds=5.0, hz=30):
 def main():
     left, right = arg("--left", "COM5"), arg("--right", "COM6")
     max_rel = float(arg("--max-rel", "20"))     # 한 번에 최대 20도만 이동 (안전)
+
+    if "--selftest" in sys.argv:
+        # 로봇·카메라 없이 프로토콜만 검증: 가짜 관측 -> 모델 서버 -> 관절 명령 변환
+        conn = socket.create_connection(("127.0.0.1", int(arg("--port", "8766"))))
+        send_msg(conn, {"reset": True}); print("[selftest] reset ->", recv_msg(conn))
+        keys = ["observation.images.top_rgb", "observation.images.left_rgb",
+                "observation.images.right_rgb"]
+        rng = np.random.RandomState(0)
+        state = np.array(HOME_L + HOME_R, dtype=np.float32)
+        for i in range(3):
+            images = {k: rng.randint(0, 255, (480, 640, 3), dtype=np.uint8) for k in keys}
+            t0 = time.time()
+            send_msg(conn, {"state": state, "images": images})
+            act = np.asarray(recv_msg(conn)["action"], dtype=np.float32)
+            target = {**rad_to_real("left", act[:6]), **rad_to_real("right", act[6:])}
+            print(f"[selftest] step {i}: {1000*(time.time()-t0):.0f}ms, action(rad) "
+                  f"{np.round(act, 3).tolist()}")
+            print("           real(deg/grip):", {k: round(v, 1) for k, v in target.items()})
+            assert act.shape == (12,) and np.isfinite(act).all()
+            state = act
+        conn.close(); print("[selftest] OK — 12관절 명령 생성·변환 정상")
+        return
 
     if "--check" in sys.argv:
         robot = make_robot(left, right, max_rel)
