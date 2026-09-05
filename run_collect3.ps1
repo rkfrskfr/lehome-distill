@@ -70,7 +70,7 @@ $i = 0
         $chunkArgs = @($script, '--garment-dir', $g.Name, '--garment-type', $Type,
             '--target-keeps', $keepsPerChunk, '--steps', $Steps, '--port', $Port,
             '--seed', ($SeedBase + 10 * $i + $c), '--out', $Out,
-            '--keep-fail', '--snapshot', '--early-kill')
+            '--keep-fail', '--snapshot')   # early-kill removed 09-06: it cut slow successes (300~550 steps) and halved the keep rate
         $proc = Start-Process -FilePath $py -ArgumentList $chunkArgs `
             -NoNewWindow -PassThru
         if (-not $proc.WaitForExit(3 * 3600 * 1000)) {

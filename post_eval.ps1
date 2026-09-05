@@ -16,9 +16,24 @@ function OtherBenchRunning {
     $ps = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'kit.exe' -and $_.CommandLine -match '(14_benchmark|16_collect_distill|22_replay_snapshots|32_judge_probe|35_frame_probe)' -and $_.CommandLine -notmatch "--port $port" }
     return ($ps | Measure-Object).Count -gt 0
 }
+function TrainingRunning {
+    $ps = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'lerobot-train' -and $_.CommandLine -notmatch 'Win32_Process' }
+    return ($ps | Measure-Object).Count -gt 0
+}
+function IsaacCount {
+    $ps = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'kit.exe' -and $_.CommandLine -match '(14_benchmark|16_collect_distill|22_replay_snapshots|32_judge_probe|35_frame_probe)' }
+    return ($ps | Measure-Object).Count
+}
 function WaitQuiet([string]$why) {
+    # VRAM budget (32 GB, JAX teacher ~9 GB resident): training + 1 Isaac, or 2 Isaac without training.
     $t = 0
-    while ((OtherBenchRunning) -and $t -lt 600) { if ($t % 30 -eq 0) { Mark "waiting for GPU ($why)" }; Start-Sleep -Seconds 60; $t++ }
+    while ($t -lt 900) {
+        $n = IsaacCount
+        if ($n -eq 0) { break }
+        if ($n -le 1 -and -not (TrainingRunning)) { break }
+        if ($t % 30 -eq 0) { Mark "waiting for GPU ($why; isaac=$n training=$(TrainingRunning))" }
+        Start-Sleep -Seconds 60; $t++
+    }
 }
 function MarkerDone([string]$file, [string]$pat) { return (Test-Path $file) -and (Select-String -Path $file -Pattern $pat -Quiet) }
 function Stop-Srv {
