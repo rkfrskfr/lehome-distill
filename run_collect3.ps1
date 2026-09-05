@@ -70,7 +70,7 @@ $i = 0
         $chunkArgs = @($script, '--garment-dir', $g.Name, '--garment-type', $Type,
             '--target-keeps', $keepsPerChunk, '--steps', $Steps, '--port', $Port,
             '--seed', ($SeedBase + 10 * $i + $c), '--out', $Out,
-            '--keep-fail', '--snapshot')
+            '--keep-fail', '--snapshot', '--early-kill')
         $proc = Start-Process -FilePath $py -ArgumentList $chunkArgs `
             -NoNewWindow -PassThru
         if (-not $proc.WaitForExit(3 * 3600 * 1000)) {
