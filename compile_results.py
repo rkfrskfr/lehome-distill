@@ -74,12 +74,16 @@ def main():
         ex8 = d[~d.garment.str.endswith("_Seen_8")]
         k, n = int(d.success.sum()), len(d)
         lo, hi = wilson(k, n)
+        npass = pd.to_numeric(d.get("n_pass"), errors="coerce") if "n_pass" in d else None
         rows.append({
             "태그": tag, "설명": desc, "판정": ver,
             "전체": f"{100*k/n:.1f}% ({k}/{n})", "95% CI": f"{lo:.0f}~{hi:.0f}",
             "Seen": f"{100*seen.success.mean():.1f}%" if len(seen) else "-",
             "Unseen": f"{100*unseen.success.mean():.1f}%" if len(unseen) else "-",
             "Seen_8 제외": f"{100*ex8.success.mean():.1f}%" if len(ex8) else "-",
+            # 성공률이 낮을 때의 변별 지표: 5개 조건 중 평균 통과 수, 4개 이상 통과 비율
+            "평균 통과조건": f"{npass.mean():.2f}/5" if npass is not None and npass.notna().any() else "-",
+            "≥4/5": f"{100*(npass >= 4).mean():.0f}%" if npass is not None and npass.notna().any() else "-",
             "판수": n, "완료": "✅" if n >= 120 else f"진행 {n}/120",
         })
         per_g[tag] = d.groupby("garment").success.agg(["sum", "size"])
