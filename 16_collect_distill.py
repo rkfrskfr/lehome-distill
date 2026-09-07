@@ -137,18 +137,10 @@ try:
         return state, images
 
     def n_pass_now():
-        """현재 통과 조건 수 (0~5). 진전 여부 판정용."""
-        idx = list(scene["check_idx"])
-        thr = [t * float(scene["gcfg"]["scale"][0])
-               for t in scene["gcfg"]["success_distance"]]
-        p = scene["view"].get_world_positions().cpu().numpy().reshape(
-            -1, 3)[idx] * 100.0
-
-        def d(a, b):
-            return float(np.linalg.norm(p[a] - p[b]))
-
-        return sum([d(0, 4) <= thr[0], d(2, 3) <= thr[1], d(1, 5) <= thr[2],
-                    d(0, 1) >= thr[3], d(4, 5) >= thr[4]])
+        """현재 통과 조건 수. 상의는 0~5, 바지는 0~4 (종류별 조건 개수)."""
+        conds, _d, _t, _n = LS.check_conditions(
+            scene["view"], scene["gcfg"], scene["check_idx"])
+        return sum(conds)
 
     def save_snap(ep_dir, i):
         """물리 상태 스냅샷: 천 입자 pos/vel + 관절각. 복원 = set_world_positions

@@ -66,3 +66,8 @@
 !make_portable.ps1
 !LAPTOP_SETUP.md
 !REAL_ROBOT_HANDOFF.md
+!37_type_smoke.py
+!38_geom_check.py
+!36_gap_analysis.py
+!alltypes_chain.ps1
+!collect_more.ps1

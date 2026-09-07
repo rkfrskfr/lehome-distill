@@ -563,20 +563,71 @@ def map_check_points(gcfg, raw, rest, say=print):
     return mapped
 
 
-def check_success_top(view, gcfg, say=print, idx=None):
-    """상의 접기 성공 판정 (success_checker_garment_fold 이식, cm 단위)."""
+# 공식 판정 조건 (success_checker_chanllege.py 이식).
+# (a, b, 부등호) — 부등호 "le" 는 d(a,b) <= thr, "ge" 는 d(a,b) >= thr.
+# 상의 2종은 같은 5조건(check_top_sleeve)을 쓰고, 바지 2종은 각각 4조건이다.
+COND_SETS = {
+    "top-long-sleeve": [(0, 4, "le"), (2, 3, "le"), (1, 5, "le"),
+                        (0, 1, "ge"), (4, 5, "ge")],
+    "top-short-sleeve": [(0, 4, "le"), (2, 3, "le"), (1, 5, "le"),
+                         (0, 1, "ge"), (4, 5, "ge")],
+    "long-pant": [(0, 4, "le"), (0, 2, "ge"), (1, 3, "ge"), (1, 5, "le")],
+    "short-pant": [(0, 1, "le"), (4, 5, "le"), (0, 4, "ge"), (1, 5, "ge")],
+}
+COND_NAMES = {
+    "top-long-sleeve": ["몸통접기", "소매A", "소매B", "어깨벌어짐", "밑단벌어짐"],
+    "top-short-sleeve": ["몸통접기", "소매A", "소매B", "어깨벌어짐", "밑단벌어짐"],
+    "long-pant": ["밑단↔허리", "다리A벌어짐", "다리B벌어짐", "밑단↔허리B"],
+    "short-pant": ["허리접기", "밑단접기", "좌우벌어짐A", "좌우벌어짐B"],
+}
+# 폴더 이름 -> 공식 표준 이름 (challenge_garment_loader.get_garment_type 와 동일)
+_TYPE_MAP = {"Top_Long": "top-long-sleeve", "Top_Short": "top-short-sleeve",
+             "Pant_Long": "long-pant", "Pant_Short": "short-pant"}
+
+
+def garment_type_of(gcfg):
+    """옷 설정에서 공식 표준 종류 이름을 얻는다.
+
+    공식 코드도 설정 파일이 아니라 **폴더 이름**으로 종류를 정한다
+    (`_get_garment_type`: 이름을 "_" 로 쪼개 앞 두 토막). 설정 json 에는 종류 필드가 없다.
+    """
+    ap = str(gcfg.get("asset_path", "")).replace("\\", "/")
+    name = os.path.basename(os.path.dirname(ap))          # 예: Pant_Long_Seen_0
+    parts = name.split("_")
+    key = "_".join(parts[:2]) if len(parts) >= 2 else name
+    if key not in _TYPE_MAP:
+        # 설정에 asset_path 가 없거나 형식이 다르면 조건 개수로 되짚는다.
+        n = len(gcfg.get("success_distance", []))
+        return "top-long-sleeve" if n == 5 else "long-pant"
+    return _TYPE_MAP[key]
+
+
+def check_conditions(view, gcfg, idx=None):
+    """옷 종류에 맞는 성공 조건을 평가한다.
+
+    반환: (conds, dists, thrs, names) — 조건 개수는 상의 5개, 바지 4개.
+    """
     import numpy as np
     idx = list(idx) if idx is not None else list(gcfg["check_point"])
-    thr = [t * float(gcfg["scale"][0]) for t in gcfg["success_distance"]]
+    scale = float(gcfg["scale"][0])
+    thrs = [t * scale for t in gcfg["success_distance"]]
     p = view.get_world_positions().cpu().numpy().reshape(-1, 3)[idx] * 100.0
+    gtype = garment_type_of(gcfg)
+    pairs = COND_SETS[gtype]
+    if len(pairs) != len(thrs):
+        raise RuntimeError(f"{gtype}: 조건 {len(pairs)}개인데 임계값 {len(thrs)}개")
+    dists, conds = [], []
+    for (a, b, op), t in zip(pairs, thrs):
+        v = float(np.linalg.norm(p[a] - p[b]))
+        dists.append(v)
+        conds.append(v <= t if op == "le" else v >= t)
+    return conds, dists, thrs, COND_NAMES[gtype]
 
-    def d(a, b):
-        return float(np.linalg.norm(p[a] - p[b]))
 
-    conds = [d(0, 4) <= thr[0], d(2, 3) <= thr[1], d(1, 5) <= thr[2],
-             d(0, 1) >= thr[3], d(4, 5) >= thr[4]]
-    dists = [d(0, 4), d(2, 3), d(1, 5), d(0, 1), d(4, 5)]
-    say(f"[success] d={[round(x, 1) for x in dists]} thr={[round(t, 1) for t in thr]} "
+def check_success_top(view, gcfg, say=print, idx=None):
+    """접기 성공 판정 (4종 공통 진입점 — 이름은 기존 호출부 호환을 위해 유지)."""
+    conds, dists, thrs, _ = check_conditions(view, gcfg, idx)
+    say(f"[success] d={[round(x, 1) for x in dists]} thr={[round(t, 1) for t in thrs]} "
         f"conds={conds}")
     return all(conds)
 

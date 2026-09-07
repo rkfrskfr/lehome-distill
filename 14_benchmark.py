@@ -45,7 +45,8 @@ if "--keep-env" not in sys.argv:
             os.environ.pop(_k, None)
 
 CSV_PATH = os.path.join(HERE, f"bench_{TAG}.csv")
-CSV_FIELDS = ["garment", "ep", "success", "step", "n_pass",
+# 조건 개수는 옷 종류마다 다르다 (상의 5 / 바지 4). 바지는 d4 가 비어 나간다.
+CSV_FIELDS = ["garment", "gtype", "ep", "success", "step", "n_pass", "n_cond",
               "d0", "d1", "d2", "d3", "d4", "sec"]
 TXT_PATH = os.path.join(HERE, f"bench_{TAG}_{GARMENT_DIR}.txt")
 
@@ -93,7 +94,8 @@ try:
 
     sys.path.insert(0, HERE)
     import lehome_scene as LS
-    from lehome_scene import (add_cameras, build_scene, check_success_top,
+    from lehome_scene import (add_cameras, build_scene, check_conditions,
+                              garment_type_of, check_success_top,
                               reset_episode)
 
     # 지정한 옷 하나만 쓰도록 선택기를 고정
@@ -167,19 +169,17 @@ try:
                     break
 
         dt = time.time() - t0
-        idx = list(scene["check_idx"])
-        thr = [t * float(scene["gcfg"]["scale"][0])
-               for t in scene["gcfg"]["success_distance"]]
-        p = scene["view"].get_world_positions().cpu().numpy().reshape(-1, 3)[idx] * 100
-        d = [float(np.linalg.norm(p[a] - p[b]))
-             for a, b in ((0, 4), (2, 3), (1, 5), (0, 1), (4, 5))]
-        n_pass = sum([d[0] <= thr[0], d[1] <= thr[1], d[2] <= thr[2],
-                      d[3] >= thr[3], d[4] >= thr[4]])
-        say(f"  결과: 성공={success} 조건통과={n_pass}/5 "
+        # 조건 개수는 옷 종류마다 다르다 (상의 5개, 바지 4개)
+        conds, d, thr, _names = check_conditions(
+            scene["view"], scene["gcfg"], scene["check_idx"])
+        n_pass = sum(conds)
+        say(f"  결과: 성공={success} 조건통과={n_pass}/{len(conds)} "
             f"거리={[round(x,1) for x in d]} ({dt:.0f}초)")
-        rows.append({"garment": GARMENT_DIR, "ep": ep,
+        rows.append({"garment": GARMENT_DIR,
+                     "gtype": garment_type_of(scene["gcfg"]),
+                     "ep": ep,
                      "success": int(success), "step": succ_step,
-                     "n_pass": n_pass,
+                     "n_pass": n_pass, "n_cond": len(conds),
                      **{f"d{j}": round(v, 2) for j, v in enumerate(d)},
                      "sec": round(dt)})
 
