@@ -17,6 +17,9 @@
     python 31_real_robot_bridge.py --check --left COM5 --right COM6
     python 31_real_robot_bridge.py --home  --left COM5 --right COM6
     python 31_real_robot_bridge.py --run   --left COM5 --right COM6 --cams 0,1,2 [--live]
+
+모델 서버가 **다른 컴퓨터**에 있으면 `--host <서버 IP>` 를 붙인다 (서버는 `--host 0.0.0.0` 로 기동).
+단 매 스텝 921KB 를 보내므로 유선 랜을 쓸 것. 가능하면 노트북에서 서버까지 함께 실행하는 편이 낫다.
 """
 
 import math
@@ -136,7 +139,7 @@ def main():
 
     if "--selftest" in sys.argv:
         # 로봇·카메라 없이 프로토콜만 검증: 가짜 관측 -> 모델 서버 -> 관절 명령 변환
-        conn = socket.create_connection(("127.0.0.1", int(arg("--port", "8766"))))
+        conn = socket.create_connection((arg("--host", "127.0.0.1"), int(arg("--port", "8766"))))
         send_msg(conn, {"reset": True}); print("[selftest] reset ->", recv_msg(conn))
         keys = ["observation.images.top_rgb", "observation.images.left_rgb",
                 "observation.images.right_rgb"]
@@ -189,7 +192,7 @@ def main():
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             caps.append(cap)
         robot = make_robot(left, right, max_rel)
-        conn = socket.create_connection(("127.0.0.1", int(arg("--port", "8766"))))
+        conn = socket.create_connection((arg("--host", "127.0.0.1"), int(arg("--port", "8766"))))
         send_msg(conn, {"reset": True}); recv_msg(conn)
         print(f"[bridge] 폐루프 시작 (live={live}). Ctrl+C 로 종료.")
         period = 1.0 / 30.0     # 모델은 30Hz 데이터로 학습됨

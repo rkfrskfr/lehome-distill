@@ -23,7 +23,10 @@ import sys
 import numpy as np
 import torch
 
-HOST, PORT = "127.0.0.1", int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8766
+# --host 0.0.0.0 : 다른 컴퓨터(실물 로봇을 붙인 노트북)에서 접속할 수 있게 개방.
+# 기본값은 이 컴퓨터 안에서만 접속 가능(127.0.0.1).
+HOST = sys.argv[sys.argv.index("--host") + 1] if "--host" in sys.argv else "127.0.0.1"
+PORT = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8766
 
 
 def recv_msg(conn):
@@ -121,8 +124,22 @@ def main():
         print("[server] CHECK_OK", flush=True)
         return
 
-    # --device cpu : GPU 가 꽉 찼을 때 프로토콜 검사용 (브리지 --selftest 등)
-    dev = sys.argv[sys.argv.index("--device") + 1] if "--device" in sys.argv else "cuda"
+    # --device cpu : GPU 가 없거나(노트북) 꽉 찼을 때. 실물 구동엔 CPU 로도 충분하다.
+    # 인자가 없으면 CUDA 가 있을 때만 GPU 를 쓰고, 없으면 자동으로 CPU 로 내려간다.
+    if "--device" in sys.argv:
+        dev = sys.argv[sys.argv.index("--device") + 1]
+    else:
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+    if dev.startswith("cuda") and not torch.cuda.is_available():
+        print("[server] 경고: CUDA 를 쓸 수 없어 CPU 로 전환", flush=True)
+        dev = "cpu"
+    # 체크포인트 설정에 device="cuda" 가 박혀 있으므로 실제 장치로 덮어쓴다
+    # (GPU 없는 노트북에서 로드 시 오류 방지).
+    try:
+        policy.config.device = dev
+    except Exception:
+        pass
+    print(f"[server] device={dev}", flush=True)
     policy.to(dev).eval()
     pre, post = make_pre_post_processors(
         policy.config, pretrained_path=ckpt,
