@@ -1,0 +1,190 @@
+# 실물 SO-101 구동 순서서 (2026-09-07 작성)
+
+시뮬레이션에서 학습한 소형 모델을 실물 양팔에 연결해 **움직임이 시뮬과 같은 방향·크기로 나오는지**
+확인하는 절차. 옷을 실제로 접는 것은 이 단계의 목표가 아님 (카메라 정렬 이후 단계).
+
+명령은 전부 PowerShell 기준. 파이썬은 `C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe` 사용.
+
+---
+
+## 0. 준비물
+
+| 항목 | 수량 | 비고 |
+|---|---|---|
+| SO-101 팔 | 2 | 왼팔·오른팔. 각 6관절(어깨회전·어깨들기·팔꿈치·손목굽힘·손목회전·그리퍼) |
+| USB 시리얼 | 2 | 팔마다 1개. 전원 어댑터 별도 |
+| 웹캠 640×480 이상 | 3 | 위 1 + 손목 2 |
+| 손목 카메라 거치 | 2 | **그리퍼에 물리적으로 고정** 필수 |
+| 테이블 · 긴팔 상의 · 조명 | - | 상판이 밝고 단색이면 유리 |
+
+안전 수칙
+- 처음 전원을 넣을 때 팔 주변 반경 1m 를 비울 것.
+- 손은 항상 전원 스위치 근처에 둘 것. 이상하면 바로 전원 차단.
+- 브리지는 1회 명령당 최대 20도만 움직이도록 제한(`--max-rel 20`)해 두었음. 더 조심하려면 10 으로 낮출 것.
+
+---
+
+## 1. 배선과 포트 확인
+
+두 팔을 USB 로 연결하고, 어느 포트가 어느 팔인지 확인한다.
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-port.exe
+```
+
+- 안내에 따라 **한 팔의 USB 를 뽑았다 꽂으면** 그 팔의 포트 이름(COM5 같은 것)을 알려준다.
+- 두 팔 각각 실행해서 왼팔·오른팔 포트를 적어 둘 것.
+
+---
+
+## 2. 모터 번호 확인 (조립 직후 1회만)
+
+출고 상태의 모터는 번호가 1~6 으로 이미 설정되어 있다. 조립 시 순서가 섞였을 때만 다시 넣는다.
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-setup-motors.exe --robot.type=so_follower --robot.port=COM5 --robot.id=lehome_bi_left
+```
+
+- 정상 조립이면 이 단계는 건너뛰어도 된다. 3단계에서 통신이 안 되면 그때 실행할 것.
+
+---
+
+## 3. 영점 잡기 (캘리브레이션)
+
+팔마다 한 번씩. **이름을 정확히 `lehome_bi_left` / `lehome_bi_right` 로 지정**해야 브리지가 찾는다.
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so_follower --robot.port=COM5 --robot.id=lehome_bi_left
+```
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so_follower --robot.port=COM6 --robot.id=lehome_bi_right
+```
+
+진행 방식
+1. "가동 범위 중앙으로 옮기고 엔터" → 팔을 대략 반쯤 접은 자세로 손으로 옮긴 뒤 엔터.
+2. "손목회전을 제외한 모든 관절을 끝에서 끝까지 움직이라" → 관절 하나씩 최대한 돌려 준 뒤 엔터.
+
+결과 파일은 `C:\Users\H\.cache\huggingface\lerobot\calibration\robots\so_follower\lehome_bi_left.json` 에 저장된다.
+(이미 다른 이름으로 잡아둔 파일이 있다면 그 파일을 위 이름으로 복사해도 된다.)
+
+---
+
+## 4. 카메라 번호 확인
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-cameras.exe opencv
+```
+
+- 연결된 카메라마다 번호(0, 1, 2 …)를 찾아 각각 사진 한 장씩 `outputs/captured_images` 에 저장한다.
+- 저장된 사진을 열어 어느 번호가 어느 카메라인지 확인한다.
+- **위 카메라 → 왼손목 → 오른손목** 순서로 번호를 적어 둘 것. 6단계에서 이 순서로 넣는다.
+
+---
+
+## 5. 모델 서버 켜기
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\12_policy_server.py C:\Users\H\Desktop\lehome-win\outputs\act_student_combo\checkpoints\060000\pretrained_model --n-action-steps 5
+```
+
+- 40초쯤 뒤 "체크포인트 로드 완료" 가 뜨면 준비된 것. 이 창은 켜 둔 채로 둔다.
+- 그래픽카드를 다른 작업이 쓰고 있으면 뒤에 `--device cpu` 를 붙여도 된다. 한 번 계산에 15밀리초라 실물 구동에 충분하다.
+
+---
+
+## 6. 로봇 없이 연결 확인
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --selftest
+```
+
+- 가짜 화면 3장을 넣어 모델이 관절 명령 12개를 내는지만 본다. "OK" 가 나오면 5단계까지 정상.
+
+---
+
+## 7. 팔 통신 확인
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --check --left COM5 --right COM6
+```
+
+- 두 팔의 현재 각도가 도(degree) 단위로 출력되면 성공.
+- 손으로 팔을 조금 움직인 뒤 다시 실행해 숫자가 따라 변하는지 확인할 것.
+
+---
+
+## 8. 홈 자세로 이동 (가장 중요한 확인)
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --home --left COM5 --right COM6
+```
+
+- 목표 각도를 먼저 보여 주고, 엔터를 누르면 5초에 걸쳐 천천히 이동한다.
+- **확인할 것**: 실물이 시뮬레이션의 시작 자세(팔을 접어 몸쪽으로 모은 모양)와 같아지는가.
+
+모양이 다르면 `31_real_robot_bridge.py` 위쪽의 표를 고친다.
+
+```python
+SIGN = {m: 1.0 for m in MOTORS}        # 방향이 반대인 관절만 -1.0
+OFFSET_DEG = {m: 0.0 for m in MOTORS}  # 각도가 통째로 밀린 관절만 값 입력
+```
+
+- 관절이 **반대 방향**으로 돌면 그 관절의 `SIGN` 을 -1.0 으로.
+- 방향은 맞는데 **일정 각도 밀려 있으면** 그 차이를 `OFFSET_DEG` 에 넣는다.
+- 그리퍼가 반대로 열고 닫으면 `GRIP_RAD_OPEN` 과 `GRIP_RAD_CLOSED` 값을 서로 바꾼다.
+- 한 관절씩 고치고 매번 `--home` 을 다시 실행하는 것이 가장 빠르다.
+
+---
+
+## 9. 명령만 출력해 보기 (실제로는 안 움직임)
+
+카메라 3대를 5단계 순서대로 넣는다.
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --run --left COM5 --right COM6 --cams 0,1,2
+```
+
+- 초당 30번, 모델이 낸 관절 명령이 화면에 출력된다. 팔은 움직이지 않는다.
+- **확인할 것**: 숫자가 급격히 튀지 않고 부드럽게 변하는가. 값이 관절 가동 범위를 벗어나지 않는가.
+- 옷을 테이블에 올려 두고 손목 카메라가 옷을 보고 있는지도 같이 확인한다.
+
+---
+
+## 10. 실제 구동
+
+9단계가 안정적이면 `--live` 를 붙인다.
+
+```bash
+C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --run --left COM5 --right COM6 --cams 0,1,2 --live
+```
+
+- Ctrl+C 로 즉시 정지. 전원 스위치도 손 닿는 곳에.
+- 처음에는 옷 없이 빈 테이블에서 한 번 돌려 팔 궤적만 보는 것을 권장.
+
+---
+
+## 11. 이번 테스트의 판정 기준
+
+성공 여부보다 아래 3가지를 확인하는 것이 목적이다.
+
+1. 모델 → 실물 명령 전달이 끊기지 않고 30Hz 로 유지되는가.
+2. 팔이 시뮬과 **같은 방향**으로, **비슷한 크기**로 움직이는가.
+3. 팔이 테이블·서로·자기 자신과 충돌하지 않는가.
+
+옷이 접히지 않는 것은 정상이다. 시뮬 전용 학습 모델이고, 실물 카메라 각도가 시뮬과 다르기 때문.
+우승자도 이 단계(sim2real)에 별도로 일주일을 썼다.
+
+---
+
+## 12. 문제가 생기면
+
+| 증상 | 원인·조치 |
+|---|---|
+| 포트를 못 찾음 | USB 케이블·전원 확인. 1단계 다시 실행 |
+| 통신은 되는데 각도가 이상함 | 3단계 영점 다시 잡기 |
+| `--home` 에서 한 관절만 반대로 감 | 8단계의 `SIGN` 표 수정 |
+| 팔이 급하게 움직임 | `--max-rel 10` 으로 낮춰 실행 |
+| 카메라 순서가 섞임 | 4단계에서 번호 다시 확인, `--cams` 순서 교정 |
+| 모델 서버 연결 실패 | 5단계 창이 살아 있는지, 포트 8766 인지 확인 |
+| 그래픽카드 메모리 부족 | 5단계에 `--device cpu` 추가 |
