@@ -58,7 +58,7 @@
 새 파이프라인: `teacher_eval.ps1`(원본 재평가) → `fix_chain.ps1`(재수집 `distill_data_fix` →
 `act_student_fix` 학습 → `fix_n5` 평가) / `post_eval.ps1`(구 모델 재평가). 결과 표: `python compile_results.py`.
 
-**고친 환경 성적 (09-07, 120판)**: 원본 85.8% · **`act_student_combo` 76.7% (최고 학생, 674판 학습, Unseen 70%)** ·
+**고친 환경 성적 (09-07)**: 원본 85.8%(120판) · **`act_student_combo` 77.1% (185/240, 최고 학생, 674판 학습, Unseen 72.5%)** ·
 `act_student_cur` 75.8%/70.8%(2회, n=240 73.3%) · seed2 62.5% · 구 챔피언 58.3% · 증강OFF 55.0% ·
 `act_student_fix`(고친 환경 169판만) 40.0%. **데이터 양이 성능을 좌우** (267→505→674판: 58→73→77%).
 데모·실물 기본 모델 = `act_student_combo` (`run_demo.ps1` 자동 선택).
