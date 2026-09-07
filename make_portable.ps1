@@ -14,7 +14,8 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 New-Item -ItemType Directory -Force "$Out\model" | Out-Null
 
 # 1) scripts + docs
-foreach ($f in "12_policy_server.py", "31_real_robot_bridge.py", "REAL_ROBOT_RUNBOOK.md", "LAPTOP_SETUP.md") {
+foreach ($f in "12_policy_server.py", "31_real_robot_bridge.py",
+                "REAL_ROBOT_HANDOFF.md", "REAL_ROBOT_RUNBOOK.md", "LAPTOP_SETUP.md") {
     if (Test-Path "$base\$f") { Copy-Item "$base\$f" "$Out\$f" -Force; Write-Host "copied $f" }
 }
 

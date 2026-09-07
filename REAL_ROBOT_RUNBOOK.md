@@ -3,7 +3,20 @@
 시뮬레이션에서 학습한 소형 모델을 실물 양팔에 연결해 **움직임이 시뮬과 같은 방향·크기로 나오는지**
 확인하는 절차. 옷을 실제로 접는 것은 이 단계의 목표가 아님 (카메라 정렬 이후 단계).
 
-명령은 전부 PowerShell 기준. 파이썬은 `C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe` 사용.
+명령은 전부 **PowerShell** 기준. Git Bash 는 쓰지 말 것 (역슬래시 경로와 activate 가 깨진다).
+
+**실행 위치**: 이식 폴더(`lehome_portable`)를 노트북에 복사한 뒤 그 폴더 안에서, 가상환경을
+활성화한 상태로 실행한다. 창을 새로 열 때마다 아래 두 줄을 먼저 친다.
+
+```powershell
+cd C:\lehome_portable
+```
+
+```powershell
+.venv\Scripts\activate
+```
+
+설치가 아직이면 같은 폴더의 `LAPTOP_SETUP.md` 를 먼저 본다.
 
 ---
 
@@ -19,6 +32,8 @@
 
 안전 수칙
 - 처음 전원을 넣을 때 팔 주변 반경 1m 를 비울 것.
+- **팔은 종료할 때 힘이 풀려 그 자리에서 떨어진다.** 브리지가 끊기 직전에 안내를 띄우고 엔터를
+  기다리니, 그 전에 팔을 받치거나 낮은 자세로 둘 것. 특히 홈 자세 확인 직후 팔 밑에 손을 넣지 말 것.
 - 손은 항상 전원 스위치 근처에 둘 것. 이상하면 바로 전원 차단.
 - 브리지는 1회 명령당 최대 20도만 움직이도록 제한(`--max-rel 20`)해 두었음. 더 조심하려면 10 으로 낮출 것.
 
@@ -28,8 +43,8 @@
 
 두 팔을 USB 로 연결하고, 어느 포트가 어느 팔인지 확인한다.
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-port.exe
+```powershell
+lerobot-find-port
 ```
 
 - 안내에 따라 **한 팔의 USB 를 뽑았다 꽂으면** 그 팔의 포트 이름(COM5 같은 것)을 알려준다.
@@ -41,8 +56,8 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-port.exe
 
 출고 상태의 모터는 번호가 1~6 으로 이미 설정되어 있다. 조립 시 순서가 섞였을 때만 다시 넣는다.
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-setup-motors.exe --robot.type=so101_follower --robot.port=COM5 --robot.id=lehome_bi_left
+```powershell
+lerobot-setup-motors --robot.type=so101_follower --robot.port=COM5 --robot.id=lehome_bi_left
 ```
 
 - 정상 조립이면 이 단계는 건너뛰어도 된다. 3단계에서 통신이 안 되면 그때 실행할 것.
@@ -54,12 +69,12 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-setup-motors.exe --robot.type=s
 
 팔마다 한 번씩. **이름을 정확히 `lehome_bi_left` / `lehome_bi_right` 로 지정**해야 브리지가 찾는다.
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so101_follower --robot.port=COM5 --robot.id=lehome_bi_left
+```powershell
+lerobot-calibrate --robot.type=so101_follower --robot.port=COM5 --robot.id=lehome_bi_left
 ```
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so101_follower --robot.port=COM6 --robot.id=lehome_bi_right
+```powershell
+lerobot-calibrate --robot.type=so101_follower --robot.port=COM6 --robot.id=lehome_bi_right
 ```
 
 진행 방식
@@ -67,15 +82,17 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so10
 2. "손목회전을 제외한 모든 관절을 끝에서 끝까지 움직이라" → 관절 하나씩 최대한 돌려 준 뒤 엔터.
 
 결과 파일은 `C:\Users\H\.cache\huggingface\lerobot\calibration\robots\so_follower\lehome_bi_left.json` 에 저장된다.
-⚠ **다른 이름으로 잡아둔 옛날 파일을 복사해 쓰지 말 것.** 영점 값은 파일을 쓸 때 모터에도 기록되며,
-다른 팔의 값을 넣으면 오류 없이 **조용히 어긋난 각도**로 움직인다. 팔마다 새로 잡는 것이 안전하다.
+⚠ **다른 이름으로 잡아둔 옛날 파일을 복사해 쓰지 말 것.** 영점 값은 **팔에 연결할 때 파일에서 모터로 기록**된다.
+연결하는 순간 "Press ENTER to use provided calibration file …" 이 뜨는데, 여기서 엔터를 누르면 그 파일
+값이 그대로 모터에 들어간다. 다른 팔의 값이면 오류 없이 **조용히 어긋난 각도**로 움직인다.
+팔마다 새로 잡는 것이 안전하다.
 
 ---
 
 ## 4. 카메라 번호 확인
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-cameras.exe opencv
+```powershell
+lerobot-find-cameras opencv
 ```
 
 - 연결된 카메라마다 번호(0, 1, 2 …)를 찾아 각각 사진 한 장씩 `outputs/captured_images` 에 저장한다.
@@ -86,19 +103,20 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-cameras.exe opencv
 
 ## 5. 모델 서버 켜기
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\12_policy_server.py C:\Users\H\Desktop\lehome-win\outputs\act_student_combo\checkpoints\060000\pretrained_model --n-action-steps 5
+```powershell
+python 12_policy_server.py model --n-action-steps 5 --device cpu
 ```
 
 - 40초쯤 뒤 "체크포인트 로드 완료" 가 뜨면 준비된 것. 이 창은 켜 둔 채로 둔다.
-- 그래픽카드를 다른 작업이 쓰고 있으면 뒤에 `--device cpu` 를 붙여도 된다. 한 번 계산에 15밀리초라 실물 구동에 충분하다.
+- 그래픽카드가 있으면 `--device cpu` 를 빼면 자동으로 GPU 를 쓴다. 실측: GPU 19밀리초 / CPU 196밀리초 (5스텝에 한 번만 계산).
+- CPU 만 쓰면 제어 주기가 10~15Hz 로 떨어진다. 이번 단계에서는 정상이다.
 
 ---
 
 ## 6. 로봇 없이 연결 확인
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --selftest
+```powershell
+python 31_real_robot_bridge.py --selftest
 ```
 
 - 가짜 화면 3장을 넣어 모델이 관절 명령 12개를 내는지만 본다. "OK" 가 나오면 5단계까지 정상.
@@ -107,8 +125,8 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-wi
 
 ## 7. 팔 통신 확인
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --check --left COM5 --right COM6
+```powershell
+python 31_real_robot_bridge.py --check --left COM5 --right COM6
 ```
 
 - 두 팔의 현재 각도가 도(degree) 단위로 출력되면 성공.
@@ -118,8 +136,8 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-wi
 
 ## 8. 홈 자세로 이동 (가장 중요한 확인)
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --home --left COM5 --right COM6
+```powershell
+python 31_real_robot_bridge.py --home --left COM5 --right COM6
 ```
 
 - 목표 각도를 먼저 보여 주고, 엔터를 누르면 5초에 걸쳐 천천히 이동한다.
@@ -143,8 +161,8 @@ OFFSET_DEG = {m: 0.0 for m in MOTORS}  # 각도가 통째로 밀린 관절만 �
 
 카메라 3대를 5단계 순서대로 넣는다.
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --run --left COM5 --right COM6 --cams 0,1,2
+```powershell
+python 31_real_robot_bridge.py --run --left COM5 --right COM6 --cams 0,1,2
 ```
 
 - 초당 30번, 모델이 낸 관절 명령이 화면에 출력된다. 팔은 움직이지 않는다.
@@ -157,8 +175,8 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-wi
 
 9단계가 안정적이면 `--live` 를 붙인다.
 
-```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\python.exe C:\Users\H\Desktop\lehome-win\31_real_robot_bridge.py --run --left COM5 --right COM6 --cams 0,1,2 --live
+```powershell
+python 31_real_robot_bridge.py --run --left COM5 --right COM6 --cams 0,1,2 --live
 ```
 
 - Ctrl+C 로 즉시 정지. 전원 스위치도 손 닿는 곳에.

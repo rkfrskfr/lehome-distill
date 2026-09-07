@@ -19,7 +19,7 @@
     python 31_real_robot_bridge.py --run   --left COM5 --right COM6 --cams 0,1,2 [--live]
 
 모델 서버가 **다른 컴퓨터**에 있으면 `--host <서버 IP>` 를 붙인다 (서버는 `--host 0.0.0.0` 로 기동).
-단 매 스텝 921KB 를 보내므로 유선 랜을 쓸 것. 가능하면 노트북에서 서버까지 함께 실행하는 편이 낫다.
+단 매 스텝 사진 3장 약 2.8MB 를 보내므로(기가비트 유선에서 왕복 22ms) 유선 랜만 쓸 것. 가능하면 노트북에서 서버까지 함께 실행하는 편이 낫다.
 """
 
 import math
@@ -121,6 +121,23 @@ def print_joints(robot):
     return obs
 
 
+def safe_disconnect(robot):
+    """연결을 끊기 전에 사람이 팔을 받칠 기회를 준다.
+
+    ⚠ lerobot 은 `disconnect()` 에서 모터 토크를 푼다(`disable_torque_on_disconnect`
+    기본값 True). 즉 어떤 모드든 종료하는 순간 **팔이 그 자리에서 힘없이 떨어진다.**
+    토크를 켠 채로 두면 감시자 없이 모터가 계속 힘을 써 과열될 수 있으므로, 기본값은
+    그대로 두고 대신 **끊는 시점을 사람이 고르게** 한다.
+    """
+    print("\n[bridge] ⚠ 이제 토크를 풉니다 — 팔이 그 자리에서 떨어집니다.")
+    try:
+        input("  팔을 받치거나 낮은 자세로 둔 뒤 Enter 를 누르세요 ")
+    except (EOFError, KeyboardInterrupt):
+        print("  (입력 없음 — 그대로 진행)")
+    robot.disconnect()
+    print("[bridge] 연결 종료 (토크 해제됨)")
+
+
 def move_slowly(robot, target, seconds=5.0, hz=30):
     """현재 자세 -> 목표 자세로 선형 보간 이동 (급가속 방지)."""
     obs = robot.get_observation()
@@ -163,7 +180,7 @@ def main():
         robot = make_robot(left, right, max_rel)
         print("[bridge] 연결 OK — 현재 관절:")
         print_joints(robot)
-        robot.disconnect()
+        safe_disconnect(robot)
         return
 
     if "--home" in sys.argv:
@@ -176,7 +193,7 @@ def main():
         print("[bridge] 도착:"); print_joints(robot)
         print("  -> 실물이 시뮬 홈 자세(팔을 접어 몸쪽으로)와 같은 모양인지 확인. "
               "다르면 SIGN/OFFSET_DEG 표를 수정.")
-        robot.disconnect()
+        safe_disconnect(robot)
         return
 
     if "--run" in sys.argv:
@@ -212,6 +229,7 @@ def main():
         print(f"[bridge] 폐루프 시작 (live={live}). Ctrl+C 로 종료.")
         period = 1.0 / 30.0     # 모델은 30Hz 데이터로 학습됨
         last_target = None      # 통신이 끊겼을 때 붙잡고 있을 마지막 자세
+        n_step, t_start, t_report = 0, time.time(), time.time()
         try:
             while True:
                 t0 = time.time()
@@ -229,10 +247,10 @@ def main():
                     send_msg(conn, {"state": state, "images": images})
                     reply = recv_msg(conn)
                 except (socket.timeout, OSError) as e:
-                    print(f"[bridge] 서버 통신 실패({e!r}) — 현재 자세 유지 후 종료")
+                    print(f"[bridge] 서버 통신 실패({e!r}) — 마지막 자세로 잠깐 고정 후 종료")
                     break
                 if not reply or "action" not in reply:
-                    print("[bridge] 서버가 응답을 끊음 — 현재 자세 유지 후 종료")
+                    print("[bridge] 서버가 응답을 끊음 — 마지막 자세로 잠깐 고정 후 종료")
                     break
                 act = np.asarray(reply["action"], dtype=np.float32)
                 target = {**rad_to_real("left", act[:6]), **rad_to_real("right", act[6:])}
@@ -241,12 +259,20 @@ def main():
                     robot.send_action(target)
                 else:
                     print("  dry-run:", {k: round(v, 1) for k, v in target.items()})
+                # 실제 제어 주기 보고: 모델이 5스텝마다 한 번 신경망을 돌리므로
+                # 그 스텝만 무겁다. CPU 로 돌리면 평균 10~20Hz 까지 떨어질 수 있다.
+                n_step += 1
+                if time.time() - t_report >= 5.0:
+                    hz = n_step / (time.time() - t_start)
+                    print(f"[bridge] 평균 {hz:.1f}Hz ({n_step}스텝)"
+                          + ("" if hz >= 25 else "  <- 30Hz 미달: 팔이 학습 때보다 느리게 움직인다"))
+                    t_report = time.time()
                 time.sleep(max(0.0, period - (time.time() - t0)))
         except KeyboardInterrupt:
             print("\n[bridge] 사용자 중지 — 현재 자세 유지")
         finally:
-            # ⚠ 그냥 disconnect 하면 토크가 풀려 팔이 떨어진다. 마지막 목표 자세를
-            # 한 번 더 보내 붙잡은 상태로 만든 뒤 끊는다.
+            # 마지막 목표 자세를 한 번 더 보내 흔들림을 줄인다. 단 이것으로 팔이
+            # 계속 붙잡혀 있는 것은 아니다 — 아래 safe_disconnect 에서 토크가 풀린다.
             if live and last_target is not None:
                 try:
                     robot.send_action(last_target)
@@ -257,9 +283,9 @@ def main():
                 conn.close()
             except Exception:
                 pass
-            robot.disconnect()
             for cap in caps:
                 cap.release()
+            safe_disconnect(robot)
         return
 
     print(__doc__)
