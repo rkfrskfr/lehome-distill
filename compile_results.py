@@ -74,6 +74,13 @@ def main():
         d = load(tag)
         if d is None or len(d) == 0:
             continue
+        # 4종 평가는 종류별 평균이 대회 점수와 같은 정의다
+        if "gtype" in d.columns and d.gtype.notna().any():
+            per_type = d.groupby("gtype").success.mean() * 100
+            type_str = " / ".join(f"{k.split('-')[0][:4]} {v:.0f}%" for k, v in per_type.items())
+            type_macro = f"{per_type.mean():.1f}%"
+        else:
+            type_str, type_macro = "-", "-"
         seen = d[d.garment.str.contains("_Seen_")]
         unseen = d[d.garment.str.contains("_Unseen_")]
         ex8 = d[~d.garment.str.endswith("_Seen_8")]
@@ -89,6 +96,7 @@ def main():
             # 성공률이 낮을 때의 변별 지표: 5개 조건 중 평균 통과 수, 4개 이상 통과 비율
             "평균 통과조건": f"{npass.mean():.2f}/5" if npass is not None and npass.notna().any() else "-",
             "≥4/5": f"{100*(npass >= 4).mean():.0f}%" if npass is not None and npass.notna().any() else "-",
+            "종류별": type_str, "종류평균": type_macro,
             "판수": n, "완료": "✅" if n >= 120 else f"진행 {n}/120",
         })
         per_g[tag] = d.groupby("garment").success.agg(["sum", "size"])

@@ -78,11 +78,18 @@ for ei, d in enumerate(ep_dirs):
     actions = np.load(os.path.join(d, "actions.npy")).astype(np.float32)
     n = states.shape[0]
     kept = list(range(0, n, SUB))
+    # 옷 종류를 task 문자열에 담는다. 4종 혼합 데이터셋에서 어느 종류의 시연인지
+    # 남지 않으면 나중에 종류별 분석·필터가 불가능해진다 (ACT 자체는 task 를 입력으로
+    # 쓰지 않으므로 학습 동작은 그대로다).
+    gname = meta.get("garment", "")
+    parts = gname.split("_")
+    gkey = "_".join(parts[:2]) if len(parts) >= 2 else "Top_Long"
+    task = f"fold the {gkey.replace('_', ' ').lower()}"
     for i in kept:
         frame = {
             "observation.state": states[i],
             "action": actions[i],
-            "task": "fold the garment",
+            "task": task,
         }
         for sub, key in CAM_KEYS.items():
             img = Image.open(os.path.join(d, sub, f"{i:04d}.jpg")).convert("RGB")
