@@ -42,10 +42,11 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-find-port.exe
 출고 상태의 모터는 번호가 1~6 으로 이미 설정되어 있다. 조립 시 순서가 섞였을 때만 다시 넣는다.
 
 ```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-setup-motors.exe --robot.type=so_follower --robot.port=COM5 --robot.id=lehome_bi_left
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-setup-motors.exe --robot.type=so101_follower --robot.port=COM5 --robot.id=lehome_bi_left
 ```
 
 - 정상 조립이면 이 단계는 건너뛰어도 된다. 3단계에서 통신이 안 되면 그때 실행할 것.
+- `--robot.type` 값은 `so101_follower` 다 (파일이 저장되는 폴더 이름은 `so_follower` 라 헷갈리기 쉽다).
 
 ---
 
@@ -54,11 +55,11 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-setup-motors.exe --robot.type=s
 팔마다 한 번씩. **이름을 정확히 `lehome_bi_left` / `lehome_bi_right` 로 지정**해야 브리지가 찾는다.
 
 ```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so_follower --robot.port=COM5 --robot.id=lehome_bi_left
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so101_follower --robot.port=COM5 --robot.id=lehome_bi_left
 ```
 
 ```bash
-C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so_follower --robot.port=COM6 --robot.id=lehome_bi_right
+C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so101_follower --robot.port=COM6 --robot.id=lehome_bi_right
 ```
 
 진행 방식
@@ -66,7 +67,8 @@ C:\Users\H\Desktop\lerobot\.venv\Scripts\lerobot-calibrate.exe --robot.type=so_f
 2. "손목회전을 제외한 모든 관절을 끝에서 끝까지 움직이라" → 관절 하나씩 최대한 돌려 준 뒤 엔터.
 
 결과 파일은 `C:\Users\H\.cache\huggingface\lerobot\calibration\robots\so_follower\lehome_bi_left.json` 에 저장된다.
-(이미 다른 이름으로 잡아둔 파일이 있다면 그 파일을 위 이름으로 복사해도 된다.)
+⚠ **다른 이름으로 잡아둔 옛날 파일을 복사해 쓰지 말 것.** 영점 값은 파일을 쓸 때 모터에도 기록되며,
+다른 팔의 값을 넣으면 오류 없이 **조용히 어긋난 각도**로 움직인다. 팔마다 새로 잡는 것이 안전하다.
 
 ---
 

@@ -190,12 +190,28 @@ def main():
             cap = cv2.VideoCapture(cid, cv2.CAP_DSHOW)
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            # ⚠ USB 대역폭: 640x480x30fps 를 무압축(YUY2)으로 받으면 카메라 1대가
+            # USB 2.0 버스의 절반을 먹어 3대가 동시에 열리지 않는다. MJPG 를 강제해
+            # 약 1/10 로 줄인다. 윈도우 DirectShow 는 해상도를 바꿀 때 형식 설정이
+            # 덮이므로 **해상도·FPS 뒤에** 지정해야 한다 (lerobot camera_opencv.py 와 동일).
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+            got = "".join(chr((fourcc >> 8 * k) & 0xFF) for k in range(4))
+            print(f"[bridge] cam {cid}: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+                  f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @{cap.get(cv2.CAP_PROP_FPS):.0f} 형식 {got}")
+            if got != "MJPG":
+                print(f"    경고: MJPG 적용 실패({got}). 카메라 3대가 같은 USB 버스에 있으면 "
+                      f"열리지 않을 수 있다 — 허브를 나눠 꽂을 것")
             caps.append(cap)
         robot = make_robot(left, right, max_rel)
         conn = socket.create_connection((arg("--host", "127.0.0.1"), int(arg("--port", "8766"))))
+        # 응답이 없으면 무한 대기하지 않는다 (네트워크·서버 문제 시 팔이 멈춰야 함)
+        conn.settimeout(float(arg("--timeout", "1.0")))
         send_msg(conn, {"reset": True}); recv_msg(conn)
         print(f"[bridge] 폐루프 시작 (live={live}). Ctrl+C 로 종료.")
         period = 1.0 / 30.0     # 모델은 30Hz 데이터로 학습됨
+        last_target = None      # 통신이 끊겼을 때 붙잡고 있을 마지막 자세
         try:
             while True:
                 t0 = time.time()
@@ -209,18 +225,39 @@ def main():
                         raise RuntimeError(f"카메라 읽기 실패: {key}")
                     frame = cv2.resize(frame, (640, 480))
                     images[key] = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.uint8)
-                send_msg(conn, {"state": state, "images": images})
-                act = np.asarray(recv_msg(conn)["action"], dtype=np.float32)
+                try:
+                    send_msg(conn, {"state": state, "images": images})
+                    reply = recv_msg(conn)
+                except (socket.timeout, OSError) as e:
+                    print(f"[bridge] 서버 통신 실패({e!r}) — 현재 자세 유지 후 종료")
+                    break
+                if not reply or "action" not in reply:
+                    print("[bridge] 서버가 응답을 끊음 — 현재 자세 유지 후 종료")
+                    break
+                act = np.asarray(reply["action"], dtype=np.float32)
                 target = {**rad_to_real("left", act[:6]), **rad_to_real("right", act[6:])}
+                last_target = target
                 if live:
                     robot.send_action(target)
                 else:
                     print("  dry-run:", {k: round(v, 1) for k, v in target.items()})
                 time.sleep(max(0.0, period - (time.time() - t0)))
         except KeyboardInterrupt:
-            pass
+            print("\n[bridge] 사용자 중지 — 현재 자세 유지")
         finally:
-            conn.close(); robot.disconnect()
+            # ⚠ 그냥 disconnect 하면 토크가 풀려 팔이 떨어진다. 마지막 목표 자세를
+            # 한 번 더 보내 붙잡은 상태로 만든 뒤 끊는다.
+            if live and last_target is not None:
+                try:
+                    robot.send_action(last_target)
+                    time.sleep(0.3)
+                except Exception as e:
+                    print(f"[bridge] 정지 자세 유지 실패(계속): {e!r}")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            robot.disconnect()
             for cap in caps:
                 cap.release()
         return

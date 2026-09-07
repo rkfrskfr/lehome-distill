@@ -152,8 +152,21 @@ def main():
     srv.listen(1)
     print(f"[server] {HOST}:{PORT} 대기 중", flush=True)
 
+    # --allow-ip <주소> : 그 주소에서 온 접속만 받는다.
+    # ⚠ 이 서버는 받은 바이트를 pickle 로 푼다. 외부에 열어 두면(--host 0.0.0.0)
+    # 같은 네트워크의 누구나 임의 코드를 실행시킬 수 있으므로, 랜에 열 때는
+    # 반드시 로봇 노트북 주소를 --allow-ip 로 지정할 것.
+    ALLOW = sys.argv[sys.argv.index("--allow-ip") + 1] if "--allow-ip" in sys.argv else None
+    if HOST not in ("127.0.0.1", "localhost") and ALLOW is None:
+        print("[server] 경고: 외부에 열려 있는데 --allow-ip 가 없다 "
+              "(신뢰할 수 없는 네트워크에서는 위험)", flush=True)
+
     while True:
         conn, addr = srv.accept()
+        if ALLOW is not None and addr[0] != ALLOW:
+            print(f"[server] 거부: {addr} (허용 {ALLOW})", flush=True)
+            conn.close()
+            continue
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         print(f"[server] 연결: {addr}", flush=True)
         try:
