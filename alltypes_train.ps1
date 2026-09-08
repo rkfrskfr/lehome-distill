@@ -31,13 +31,16 @@ function Start-Srv([string]$ckpt, [string]$tag) {
     return (PortUp $port)
 }
 
-# ---- 1) wait for the four-type collection to finish
-Mark "alltypes_train armed - waiting for ALLTYPES-COLLECT-DONE"
+# ---- 1) wait for the BALANCING pass, not just the first collection.
+# The first pass left Top_Long with 914 episodes and the three new types with about 150 each (6:1),
+# which would make a "four-type average" mostly a Top_Long score. balance_chain.ps1 tops the three
+# new types up to about 480 episodes each before we train.
+Mark "alltypes_train armed - waiting for BALANCE-DONE"
 $t = 0
-while ($t -lt 900) {
-    if (MarkerDone "$base\alltypes_markers.log" 'ALLTYPES-COLLECT-DONE') { break }
-    $alive = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'alltypes_chain\.ps1' -and $_.CommandLine -notmatch 'Win32_Process' }
-    if (-not $alive) { Mark "alltypes_chain gone - proceeding"; break }
+while ($t -lt 3000) {
+    if (MarkerDone "$base\balance_markers.log" 'BALANCE-DONE') { break }
+    $alive = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'balance_chain\.ps1' -and $_.CommandLine -notmatch 'Win32_Process' }
+    if (-not $alive) { Mark "balance_chain gone - proceeding with whatever is on disk"; break }
     Start-Sleep -Seconds 60; $t++
 }
 
