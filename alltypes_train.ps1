@@ -35,12 +35,25 @@ function Start-Srv([string]$ckpt, [string]$tag) {
 # The first pass left Top_Long with 914 episodes and the three new types with about 150 each (6:1),
 # which would make a "four-type average" mostly a Top_Long score. balance_chain.ps1 tops the three
 # new types up to about 480 episodes each before we train.
+# Wait for the marker, full stop. An earlier version also proceeded when the collection PROCESS
+# disappeared, and that fired the moment the single-stream chain was replaced by the two parallel
+# workers — it trained on the imbalanced set and stole GPU memory from the collection.
+# The process check is now only a guard against a crash: it needs the collection to be absent for
+# 30 consecutive minutes AND the four types to already be reasonably balanced.
 Mark "alltypes_train armed - waiting for BALANCE-DONE"
-$t = 0
-while ($t -lt 3000) {
-    if (MarkerDone "$base\balance_markers.log" 'BALANCE-DONE') { break }
-    $alive = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'balance_chain\.ps1' -and $_.CommandLine -notmatch 'Win32_Process' }
-    if (-not $alive) { Mark "balance_chain gone - proceeding with whatever is on disk"; break }
+$t = 0; $goneFor = 0
+while ($t -lt 5000) {
+    if (MarkerDone "$base\balance_markers.log" 'BALANCE-DONE') { Mark "balance complete"; break }
+    $alive = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '(balance2\.ps1|balance_worker\.ps1|run_collect3\.ps1|16_collect_distill)' -and $_.CommandLine -notmatch 'Win32_Process' }
+    if ($alive) { $goneFor = 0 } else { $goneFor++ }
+    if ($goneFor -ge 30) {
+        $small = @('distill_data_top_short','distill_data_pant_long','distill_data_pant_short') |
+            ForEach-Object { @(Get-ChildItem "$base\$_" -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'meta.json') }).Count } |
+            Measure-Object -Minimum | Select-Object -ExpandProperty Minimum
+        if ($small -ge 400) { Mark "collection stopped for 30min and every type has >=$small episodes - proceeding"; break }
+        Mark "collection stopped but the smallest type only has $small episodes - still waiting"
+        $goneFor = 0
+    }
     Start-Sleep -Seconds 60; $t++
 }
 
