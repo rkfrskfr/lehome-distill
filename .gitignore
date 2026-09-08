@@ -73,3 +73,8 @@
 !collect_more.ps1
 !run_full_bench4.ps1
 !chunk30_chain.ps1
+!chunk30_eval.ps1
+!chunk30_eval2.ps1
+!alltypes_train.ps1
+!39_garment_sizes.py
+!40_scene_scale.py
