@@ -82,3 +82,5 @@
 !balance_worker.ps1
 !balance2.ps1
 !disk_guard.ps1
+!41_prune_fails.py
+!prune_loop.ps1
