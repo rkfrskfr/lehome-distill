@@ -26,7 +26,12 @@ import numpy as np
 import websockets
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TCP_HOST, TCP_PORT = "127.0.0.1", 8767
+TCP_HOST = "127.0.0.1"
+# --tcp-port N : 중계기를 여러 개 띄워 수집을 병렬로 돌릴 때 쓴다. 교사 서버(serve.py)는
+# InferenceBatcher 로 여러 클라이언트의 요청을 한 번에 묶어 GPU 에 태우므로 동시 접속이 이득이다.
+# --session NAME : 서버 로그에서 스트림을 구분하는 이름 (추론 자체는 요청마다 독립).
+TCP_PORT = int(sys.argv[sys.argv.index("--tcp-port") + 1]) if "--tcp-port" in sys.argv else 8767
+SESSION = sys.argv[sys.argv.index("--session") + 1] if "--session" in sys.argv else "isaac"
 WS_URL = "ws://localhost:8000"
 if "--ws" in sys.argv:
     WS_URL = sys.argv[sys.argv.index("--ws") + 1]
@@ -101,7 +106,7 @@ class WinnerPolicy:
 
         req = {
             "type": "infer_chunk",
-            "session_id": "isaac",
+            "session_id": SESSION,
             "observation.state": [float(v) for v in np.asarray(state).reshape(-1)],
             "inference_config": self.cfg(),
         }

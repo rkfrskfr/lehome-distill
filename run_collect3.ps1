@@ -15,6 +15,7 @@ param(
     [string]$GarmentTex = "half",
     [int]$SeedBase = 500,      # change for a fresh batch (seeds = base+10*i+c)
     [string]$Only = "",        # regex: collect only matching garments
+    [string]$CountDirs = "",   # folders to count existing episodes in (default: -Out only)
     # drop height of the garment centre. Since the 09-05 rest-pose fix the garment's lowest point is
     # ~7.4 cm below the centre, so 0.60..0.66 keeps it 0.5..6.5 cm above the table (official 0.63).
     # (the old "0.545,0.63" range was tuned for the buggy +23 cm offset and would now bury the cloth)
@@ -42,9 +43,15 @@ Write-Host "===== CYCLE 3: $($garments.Count) garments x $Keeps keeps ($Chunks c
 $i = 0
 :outer foreach ($g in $garments) {
     $i++
-    # resume support: skip a garment that already has enough episodes on disk
-    $have = @(Get-ChildItem "C:\Users\H\Desktop\lehome-win\$Out" -Directory `
-        -Filter "$($g.Name)_*" -ErrorAction SilentlyContinue).Count
+    # resume support: skip a garment that already has enough episodes on disk.
+    # -CountDirs lets us count across several collection rounds (Top_Long data lives in five
+    # folders, so counting only -Out would re-collect everything).
+    $countIn = if ($CountDirs -ne "") { $CountDirs.Split(",") } else { @($Out) }
+    $have = 0
+    foreach ($cd in $countIn) {
+        $have += @(Get-ChildItem "C:\Users\H\Desktop\lehome-win\$cd" -Directory `
+            -Filter "*$($g.Name)_*" -ErrorAction SilentlyContinue).Count
+    }
     if ($have -ge $Keeps) {
         Write-Host "--- skip $($g.Name): already $have/$Keeps ---"
         continue
